@@ -3,10 +3,10 @@ version 36
 __lua__
 --shmup: tutorial by lazydevs
 
+--last commit: 2/3/23
+
 --todo
 ----------------
---new enemy function
-
 --game over screen (timer after
 		-- death)
 --wave logic
@@ -80,7 +80,7 @@ function start_game()
 	player.rbtspr=19
 	player.rbtturningspr=15
 	player.lives=4
-	player.lives_remaining=1
+	player.lives_remaining=4
 
 	prop={}
 	prop.sprite=4
@@ -174,19 +174,6 @@ function draw_bullets()
 		local bul=bullets[i]
 		bul.spr=63
 		draw_spr(bul)
-	end
-end
-
-function draw_enemies()
-	for myen in all(enemies) do
-		if myen.flash>0 then
-			myen.flash-=1
-			for i=1, 15 do
-				pal(i,7)
-			end
-		end
-		draw_spr(myen)
-		pal()
 	end
 end
 
@@ -333,7 +320,7 @@ end
 --debug call
 
 function debug()
---	print(#shwaves,0,119)
+print("javis es el mejor",0,119,7)
 end
 
 
@@ -665,24 +652,13 @@ end
 -->8
 --waves and enemies
 
-
 function spawn_enemies()
 	spawntimer+=1
 	if spawntimer>=spawnrate then
 		local myen=new_enemy()
-		
-		
---myen.type=flr(rnd(2)+1)
 		myen.y=-8
 		myen.x=flr(rnd(120)+1)
 		myen.flash=0
-		if myen.type==1 then
-			myen.spr=31
-			myen.hp=8
-		else
-			myen.spr=33
-			myen.hp=12
-		end
 		add(enemies,myen)
 		spawntimer=0
 	end
@@ -690,21 +666,21 @@ end
 
 function new_enemy()
 	local myen={}
-	local entypes={1,2}
+	local entypes={1,2,3,4}
 	myen.type=rnd(entypes)
+	if(myen.type==1)myen.spr=31 myen.hp=8
+	if(myen.type==2)myen.spr=33 myen.hp=12
+	if(myen.type==3)myen.spr=45 myen.hp=16
+	if(myen.type==4)myen.spr=47 myen.hp=20
+	myen.ani=0
 	return myen
 end
 
 function manage_enemies()
 	for myen in all(enemies) do
 		myen.y+=1
-		myen.spr+=0.1--animation speed
-		if myen.type==1 and myen.spr>=33 then
-			myen.spr=31
-		end
-		if myen.type==2 and myen.spr>=35 then
-			myen.spr=33
-		end
+		myen.ani+=0.1--animation speed
+		if (myen.ani>=2)myen.ani=0
 		if myen.y>128 then
 			del(enemies,myen)
 		end
@@ -724,6 +700,18 @@ function manage_enemies()
 	end
 end
 
+function draw_enemies()
+	for myen in all(enemies) do
+		if myen.flash>0 then
+			myen.flash-=1
+			for i=1, 15 do
+				pal(i,7)
+			end
+		end
+		spr(myen.spr+myen.ani,myen.x,myen.y)
+		pal()
+	end
+end
 
 function nextwave()
 	wave+=1
