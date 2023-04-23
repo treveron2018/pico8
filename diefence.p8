@@ -7,7 +7,6 @@ __lua__
 --todo
 --sfx
 --music
---tutorial screen
 
 function _init()
 	version="1.0"
@@ -18,8 +17,7 @@ function _init()
 	diff_pos={
 		{x=12,y=74, diff="normal"},
 		{x=44,y=74, diff="easy"},
-		{x=68,y=74, diff="tutorial"},
-		
+		{x=68,y=74, diff="tutorial"},		
 	}
 	current_dpos=1
 	
@@ -119,8 +117,11 @@ makes them more powerful and
 heals them! selecting an
 already upgraded die 
 just heals them!
+press ❎ if you
+don't need an upgrade
+for a free reroll!
 
-recycle! if youe don't need
+recycle! if you don't need
 the die you just rolled
 press ❎ to try again
 with 50% of the roll bar!
@@ -208,7 +209,7 @@ function update_game()
 	we=wave_enemies[wave]
 	if(t%3==0)fire()
 	manage_waves()
-	if mode!="over" then
+	if mode!="over" and mode!="win" then
 		if not replacing then
 			if(btnp(0))select_cell(-1)
 			if(btnp(1))select_cell(1)
@@ -269,9 +270,6 @@ function draw_game()
 	die_hp()
 	draw_row_cleaners()
 	draw_ci()
-	
-	--print(loop,1,1,7)
-
 end
 -->8
 --grid functions
@@ -402,6 +400,10 @@ function right_ui()
 	local t1=""
 	local t2=""
 	local t3=""
+	if loop then
+		t3="🅾️/❎ to restart"
+		print(t3,ruix,ruiy_l3,7)	
+	end
 	if mode=="wave" then
 		t2="wave "..wave
 		print(t2,ruix,ruiy_l2,blink())
@@ -409,15 +411,11 @@ function right_ui()
 		t2="horde incoming!"
 		print(t2,ruix,ruiy_l2,blink())	
 	elseif mode=="win" then
-		t2="congratulations!"
-		print(t2,ruix,ruiy_l2,blink())	elseif mode=="win" then
+		t1="congratulations!"
+		print(t1,ruix,ruiy_l1,blink())	elseif mode=="win" then
 	elseif mode=="over" then
 		t1="game over..."
 		print(t1,ruix,ruiy_l1,blink())	
-		if loop then
-			t3="🅾️/❎ to restart"
-			print(t3,ruix,ruiy_l3,7)	
-		end
 	else
 		if replacing then
 			t1="replace dice?"
@@ -842,7 +840,6 @@ function spawn_enemies()
 	if spawn_timer>=spawn_rate
 	and #we>0 
 	and not has_horde then 
-
 		local e=rnd(we)
 		add_enemy(e)
 		del(we,e)
@@ -944,6 +941,7 @@ function manage_enemies()
 		if e.x<=-6 then
 			lives-=1
 			explode(e,3)
+			shake=4
 			local r={
 				x=e.x,
 				y=e.y+3,
@@ -1369,7 +1367,7 @@ function manage_waves()
 			mode="game"
 			c_pause=nil
 		end
-	elseif mode=="over" and not loop then
+	elseif (mode=="over" or mode=="win") and not loop then
 		if c_pause and costatus(c_pause)!="dead"then
 			coresume(c_pause)		
 		else
@@ -1387,7 +1385,7 @@ function manage_waves()
 			has_horde=true
 		end
 	else
-		check_wave()
+		if (mode!="over")	check_wave()
 	end
 end
 
@@ -1400,8 +1398,9 @@ function check_wave()
 			c_pause=cocreate(pause)
 			c_horde=cocreate(spawn_horde)
 		else
-			if wave==3 then
+			if wave==1 then
 				mode="win"
+				c_pause=cocreate(pause)
 			else
 				has_horde=false
 				wave+=1
