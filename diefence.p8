@@ -10,20 +10,48 @@ __lua__
 --tutorial screen
 
 function _init()
+	version="1.0"
 	mode="title"
 	is_easy=false
 	blinkt=0
 	blinkb=0
 	diff_pos={
-		{x=21,y=74, diff="normal"},
-		{x=72,y=74, diff="easy"}
+		{x=12,y=74, diff="normal"},
+		{x=44,y=74, diff="easy"},
+		{x=68,y=74, diff="tutorial"},
+		
 	}
 	current_dpos=1
+	
+	tut_dice={
+		{1,
+		[[peasant: low attack,
+increases roll bar speed]]
+		},
+		{33,
+		[[soldier: high attack]]
+		},
+		{5,
+		[[archer: low attack,
+high range]]
+		},
+		{37,
+		[[shield bearer: very high hp
+but does not attack]]
+		},
+		{9,
+		[[priest:attack enemies and
+heal allies around them]]
+		}
+	}
+page=1
 end
 
 function _update()
 	if mode=="title" then
 		update_title()
+	elseif mode=="tutorial" then
+		update_tutorial()
 	else
 		update_game()
 	end
@@ -32,24 +60,76 @@ end
 function _draw()
 	if mode=="title" then
 		draw_title()
+	elseif mode=="tutorial" then
+		draw_tutorial()
 	else
 		draw_game()
 	end
 end
 
 function update_title()
-	if(btnp(❎)or btnp(🅾️)) start_game()
+	if btnp(❎)or btnp(🅾️) then
+	 if(current_dpos==1 or current_dpos==2)start_game()
+	 if(current_dpos==3)mode="tutorial"
+	end
 	diff_select()	
 end
 
 function draw_title()
 	cls(1)
+	local title_string="❎/🅾️ start game"
+	if(current_dpos==3)title_string="❎/🅾️ how to play"
 	print("die-fence",44,43,blink())
-	print("❎/🅾️ start game",29,85,7)
-	print("normal		easy",29,75,7)
+	print(title_string,29,85,7)
+	for opt in all(diff_pos) do
+		print(opt.diff,opt.x+8,opt.y+1)
+	end 
 	spr(48,diff_pos[current_dpos].x,diff_pos[current_dpos].y)
 	if(current_dpos==2)print("with 5 free dice!",28,94,7)
+	print("v "..version,1,1,7)
+	print("by @trevvieaamb",65,120,7)
+end
 
+function update_tutorial()
+	if btnp(❎)or btnp(🅾️) then 
+		page+=1
+		if page>2 then
+			mode="title"
+			page=1
+		end
+	end
+end
+
+function draw_tutorial()
+	cls()
+	if page==1 then
+		print([[
+		roll the dice 
+		and defend the wall!
+		]],2,2,7)
+		for i=1,5 do
+			spr(tut_dice[i][1],3,18*i,2,2)
+			print(tut_dice[i][2],20,18*i+2,7)
+		end
+		print("🅾️ or ❎ next page",1,120,blink())
+	elseif page==2 then
+		print(		[[roll a 6 and select a die
+to upgrade it! upgrading 
+makes them more powerful and
+heals them! selecting an
+already upgraded die 
+just heals them!
+
+recycle! if youe don't need
+the die you just rolled
+press ❎ to try again
+with 50% of the roll bar!
+
+replace! you can put a die
+on top of another to
+replace it!]],2,2,7)
+		print("🅾️ or ❎ to go back to title",1,120,blink())	
+	end
 end
 
 function start_game()
@@ -302,8 +382,6 @@ function animate_roll()
 	ui_dice+=1
 	if(ui_dice>6)ui_dice=1 
 	if die_ani>=30 then
---local test={1,6}
---ui_dice=rnd(test)
 	ui_dice=flr(rnd(6))+1
 	small_explosion(ui_dicex+4,ui_dicey+4)
 	while #dice==0 and ui_dice==6 do
@@ -483,11 +561,11 @@ end
 function diff_select()
 	if btnp(⬅️) then
 		current_dpos-=1
-		if(current_dpos<1)current_dpos=2
+		if(current_dpos<1)current_dpos=3
 	end
 	if btnp(➡️) then
 		current_dpos+=1
-		if(current_dpos>2)current_dpos=1
+		if(current_dpos>3)current_dpos=1
 	end
 end
 -->8
