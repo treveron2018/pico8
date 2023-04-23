@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 36
+version 41
 __lua__
 --die-fence
 --by treveron
@@ -1398,7 +1398,7 @@ function check_wave()
 			c_pause=cocreate(pause)
 			c_horde=cocreate(spawn_horde)
 		else
-			if wave==1 then
+			if wave==3 then
 				mode="win"
 				c_pause=cocreate(pause)
 			else
