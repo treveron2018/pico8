@@ -270,6 +270,7 @@ function draw_game()
 	die_hp()
 	draw_row_cleaners()
 	draw_ci()
+	if(die_loaded)preview()
 end
 -->8
 --grid functions
@@ -326,6 +327,7 @@ function select_cell(s)
 			if(sel<=0)sel+=count(grid)
 			if(sel>count(grid))sel-=count(grid)
 			grid[sel].selected=true
+			
 			return
 		end
 	end
@@ -340,6 +342,7 @@ function rnd_tiles()
 		end
 	end
 end
+
 
 -->8
 --ui functions
@@ -386,9 +389,9 @@ function animate_roll()
 	ui_dice+=1
 	if(ui_dice>6)ui_dice=1 
 	if die_ani>=30 then
-	--ui_dice=flr(rnd(6))+1
-	local test={1,6}
-	ui_dice=rnd(test)
+	ui_dice=flr(rnd(6))+1
+--	local test={1,6}
+--	ui_dice=rnd(test)
 	small_explosion(ui_dicex+4,ui_dicey+4)
 	while #dice==0 and ui_dice==6 do
 		ui_dice=flr(rnd(6))+1
@@ -572,6 +575,22 @@ function diff_select()
 	if btnp(➡️) then
 		current_dpos+=1
 		if(current_dpos>3)current_dpos=1
+	end
+end
+
+function preview()
+	local sprites={1,33,5,37,9}
+	local even=true
+	for g in all(grid) do
+		if g.selected then
+			spr(sprites[ui_dice],g.diex,g.diey,2,2)
+			if(g.used)pal(1,8)
+			spr(15,g.diex,g.diey)
+			spr(15,g.diex+8,g.diey)
+			spr(15,g.diex,g.diey+8)
+			spr(15,g.diex+8,g.diey+8)
+			pal()
+		end
 	end
 end
 -->8
