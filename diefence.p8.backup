@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 36
+version 41
 __lua__
 --die-fence
 --by treveron
@@ -7,26 +7,49 @@ __lua__
 --todo
 --sfx
 --music
---tutorial screen
---game over screen
---undo spawning test
---wave 3
 
 function _init()
+	version="1.0"
 	mode="title"
 	is_easy=false
 	blinkt=0
 	blinkb=0
 	diff_pos={
-		{x=21,y=74, diff="normal"},
-		{x=72,y=74, diff="easy"}
+		{x=12,y=74, diff="normal"},
+		{x=44,y=74, diff="easy"},
+		{x=68,y=74, diff="tutorial"},		
 	}
 	current_dpos=1
+	
+	tut_dice={
+		{1,
+		[[peasant: low attack,
+increases roll bar speed]]
+		},
+		{33,
+		[[soldier: high attack]]
+		},
+		{5,
+		[[archer: low attack,
+high range]]
+		},
+		{37,
+		[[shield bearer: very high hp
+but does not attack]]
+		},
+		{9,
+		[[priest:attack enemies and
+heal allies around them]]
+		}
+	}
+page=1
 end
 
 function _update()
 	if mode=="title" then
 		update_title()
+	elseif mode=="tutorial" then
+		update_tutorial()
 	else
 		update_game()
 	end
@@ -35,24 +58,79 @@ end
 function _draw()
 	if mode=="title" then
 		draw_title()
+	elseif mode=="tutorial" then
+		draw_tutorial()
 	else
 		draw_game()
 	end
 end
 
 function update_title()
-	if(btn(❎)or btn(🅾️)) start_game()
+	if btnp(❎)or btnp(🅾️) then
+	 if(current_dpos==1 or current_dpos==2)start_game()
+	 if(current_dpos==3)mode="tutorial"
+	end
 	diff_select()	
 end
 
 function draw_title()
 	cls(1)
+	local title_string="❎/🅾️ start game"
+	if(current_dpos==3)title_string="❎/🅾️ how to play"
 	print("die-fence",44,43,blink())
-	print("❎/🅾️ start game",29,85,7)
-	print("normal		easy",29,75,7)
+	print(title_string,29,85,7)
+	for opt in all(diff_pos) do
+		print(opt.diff,opt.x+8,opt.y+1)
+	end 
 	spr(48,diff_pos[current_dpos].x,diff_pos[current_dpos].y)
 	if(current_dpos==2)print("with 5 free dice!",28,94,7)
+	print("v "..version,1,1,7)
+	print("by @trevvieaamb",65,120,7)
+end
 
+function update_tutorial()
+	if btnp(❎)or btnp(🅾️) then 
+		page+=1
+		if page>2 then
+			mode="title"
+			page=1
+		end
+	end
+end
+
+function draw_tutorial()
+	cls()
+	if page==1 then
+		print([[
+		roll the dice 
+		and defend the wall!
+		]],2,2,7)
+		for i=1,5 do
+			spr(tut_dice[i][1],3,18*i,2,2)
+			print(tut_dice[i][2],20,18*i+2,7)
+		end
+		print("🅾️ or ❎ next page",1,120,blink())
+	elseif page==2 then
+		print(		[[roll a 6 and select a die
+to upgrade it! upgrading 
+makes them more powerful and
+heals them! selecting an
+already upgraded die 
+just heals them!
+press ❎ if you
+don't need an upgrade
+for a free reroll!
+
+recycle! if you don't need
+the die you just rolled
+press ❎ to try again
+with 50% of the roll bar!
+
+replace! you can put a die
+on top of another to
+replace it!]],2,2,7)
+		print("🅾️ or ❎ to go back to title",1,120,blink())	
+	end
 end
 
 function start_game()
@@ -94,6 +172,12 @@ function start_game()
 	
 	enemy_spawnx=134
 	enemy_spawny={10,28,46,64,82}--rows y pos
+	wave_enemies={
+		{4,4,4,4,4,4,4,4,4,4},
+		{4,4,4,4,4,4,4,8,8,8,8,8,8,8,8},
+		{4,4,4,4,4,4,4,12,12,8,8,8,8,8,8,8,8}
+	}
+	
 	enemies={}
 	d12s={}
 	m_missiles={}
@@ -103,38 +187,40 @@ function start_game()
 	att_ani={}
 	arrows={}
 	shwaves={}
+	row_cleaners={}
 	
 	wave=1
+	loop=false
 	enemy_counter=10
 	c_pause=cocreate(pause)
 	c_horde=nil
-	
 	replacing=false
-	upgrading=false
-	
+	upgrading=false	
 	particles={}
 	flames={}
 	fire()
-	--test for d12
-	spawn_enemies()
+
+	--debug
+
 end
 
 function update_game()
-t+=1
-if(t%3==0)fire()
-if(lives<=0)mode="over"
+	t+=1
+	we=wave_enemies[wave]
+	if(t%3==0)fire()
 	manage_waves()
-	if not replacing then
-		if(btnp(0))select_cell(-1)
-		if(btnp(1))select_cell(1)
-		if(btnp(2))select_cell(-5)
-		if(btnp(3))select_cell(5)
-		recycle()
-	if(upgrading)upgrade()
-	end
-	roll()
-	if (animate_die)animate_roll()
-	
+	if mode!="over" and mode!="win" then
+		if not replacing then
+			if(btnp(0))select_cell(-1)
+			if(btnp(1))select_cell(1)
+			if(btnp(2))select_cell(-5)
+			if(btnp(3))select_cell(5)
+			recycle()
+			if(upgrading)upgrade()
+		end
+		roll()
+		if (animate_die)animate_roll()
+	end	
 	if replacing then 
 		is_replacing()
 		if(btnp(❎))replacing=false
@@ -143,9 +229,15 @@ if(lives<=0)mode="over"
 		set_dice()
 	end
 	
---	if(mode=="game")spawn_enemies()
-	
+	if cleaning_row==true then
+		if c_clean and costatus(c_clean)!="dead" then
+			coresume(c_clean)
+		end
+	end
+	if(mode=="game")spawn_enemies()
 
+	if(loop and (btnp(🅾️) or btnp(❎)))mode="title"
+	
 	manage_enemies()
 	manage_d12s()
 	manage_missiles()
@@ -155,10 +247,8 @@ if(lives<=0)mode="over"
 	manage_arrows()
 	manage_particles()
 	manage_fire()
+	manage_row_cleaners()
 	camera_shake()
---	debug=enemy_counter
---	debug2=mode
---	debug3=has_horde
 end
 
 function draw_game()
@@ -178,11 +268,9 @@ function draw_game()
 	draw_arrows()
 	draw_shwaves()
 	die_hp()
+	draw_row_cleaners()
 	draw_ci()
-	
-	--print(debug,1,1,7)
-	--print(debug2,1,8,7)
-	--print(debug3,1,16,7)
+	if(die_loaded)preview()
 end
 -->8
 --grid functions
@@ -239,6 +327,7 @@ function select_cell(s)
 			if(sel<=0)sel+=count(grid)
 			if(sel>count(grid))sel-=count(grid)
 			grid[sel].selected=true
+			
 			return
 		end
 	end
@@ -254,20 +343,25 @@ function rnd_tiles()
 	end
 end
 
+
 -->8
 --ui functions
 function draw_lives()
-	pal(8,8+128)
 	for i=1, 3 do
 		spr(32,-8+i*9,1)
 	end
 	for i=1,lives do
 		spr(16,-8+i*9,1)
 	end
-	pal()
 end
 function left_ui()
 	spr(63+ui_dice,ui_dicex,ui_dicey)
+	if not animate_die
+	and not die_loaded 
+	and not upgrading	
+	then
+		spr(15,ui_dicex,ui_dicey)
+	end
 	local col=8
 	if(can_roll and not die_loaded)col=blink(true)
 	rect(15,108,24,123,7)
@@ -295,9 +389,9 @@ function animate_roll()
 	ui_dice+=1
 	if(ui_dice>6)ui_dice=1 
 	if die_ani>=30 then
---local test={1,6}
---ui_dice=rnd(test)
 	ui_dice=flr(rnd(6))+1
+--	local test={1,6}
+--	ui_dice=rnd(test)
 	small_explosion(ui_dicex+4,ui_dicey+4)
 	while #dice==0 and ui_dice==6 do
 		ui_dice=flr(rnd(6))+1
@@ -317,6 +411,10 @@ function right_ui()
 	local t1=""
 	local t2=""
 	local t3=""
+	if loop then
+		t3="🅾️/❎ to restart"
+		print(t3,ruix,ruiy_l3,7)	
+	end
 	if mode=="wave" then
 		t2="wave "..wave
 		print(t2,ruix,ruiy_l2,blink())
@@ -324,11 +422,11 @@ function right_ui()
 		t2="horde incoming!"
 		print(t2,ruix,ruiy_l2,blink())	
 	elseif mode=="win" then
-		t2="congratulations!"
-		print(t2,ruix,ruiy_l2,blink())	elseif mode=="win" then
+		t1="congratulations!"
+		print(t1,ruix,ruiy_l1,blink())	elseif mode=="win" then
 	elseif mode=="over" then
-		t2="game over..."
-		print(t2,ruix,ruiy_l2,blink())	
+		t1="game over..."
+		print(t1,ruix,ruiy_l1,blink())	
 	else
 		if replacing then
 			t1="replace dice?"
@@ -472,11 +570,27 @@ end
 function diff_select()
 	if btnp(⬅️) then
 		current_dpos-=1
-		if(current_dpos<1)current_dpos=2
+		if(current_dpos<1)current_dpos=3
 	end
 	if btnp(➡️) then
 		current_dpos+=1
-		if(current_dpos>2)current_dpos=1
+		if(current_dpos>3)current_dpos=1
+	end
+end
+
+function preview()
+	local sprites={1,33,5,37,9}
+	local even=true
+	for g in all(grid) do
+		if g.selected then
+			spr(sprites[ui_dice],g.diex,g.diey,2,2)
+			if(g.used)pal(1,8)
+			spr(15,g.diex,g.diey)
+			spr(15,g.diex+8,g.diey)
+			spr(15,g.diex,g.diey+8)
+			spr(15,g.diex+8,g.diey+8)
+			pal()
+		end
 	end
 end
 -->8
@@ -749,23 +863,15 @@ end
 --enemy functions
 
 function spawn_enemies()
-	add_enemy(12)
---[[	spawn_timer=spawn_timer+1+count(dice)*0.05
+	spawn_timer=spawn_timer+1+count(dice)*0.05
 	if spawn_timer>=spawn_rate
-	and enemy_counter>0 and not has_horde then 
-		if wave==1 then
-			add_enemy(4)
-		elseif wave==2 then
-			local n=rnd()
-			if n>.5 then
-				add_enemy(4)
-			else
-				add_enemy(8)
-			end	
-		end
+	and #we>0 
+	and not has_horde then 
+		local e=rnd(we)
+		add_enemy(e)
+		del(we,e)
 		spawn_timer=0
-		enemy_counter-=1
-	end]]--
+	end
 end
 
 function spawn_horde()
@@ -784,8 +890,16 @@ function spawn_horde()
 		myen.y=enemy_spawny[i]
 		add(enemies,myen)
 	end
+	if wave==3 then
+		for j=1,90 do
+			yield()
+		end
+		for i=1,2 do
+			local myen=add_enemy(12,true)
+			add(d12s,myen)
+		end	
+	end
 	c_horde=nil
-	enemy_counter=0
 end
 
 function add_enemy(d,is_horde)
@@ -852,10 +966,17 @@ function manage_enemies()
 		wait(e)
 		if(not e.combat and not e.wait)	e.x-=e.spd
 		if e.x<=-6 then
-			explode(e,3)
-			del(enemies,e)
 			lives-=1
-			shake=2
+			explode(e,3)
+			shake=4
+			local r={
+				x=e.x,
+				y=e.y+3,
+				r=5,
+				col=7,
+			}
+			add(row_cleaners,r)
+			del(enemies,e)
 		end
 		if(e.type==4 or e.type==8)manage_d4s(e)
 	end
@@ -912,8 +1033,7 @@ function manage_d12s()
 			end
 			if d.charge>=d.fullcharge and #dice>0 then
 				d.charge=0
-				d.phase=3
-			
+				d.phase=3			
 				local m={
 					x=d.x+2,
 					y=d.y+3,
@@ -1032,7 +1152,9 @@ function draw_missiles()
 end
 
 function wait(e)
-		if not enemy_hitbox_detection(e,enemies) then
+		if not enemy_hitbox_detection(e,enemies)
+		and not enemy_hitbox_detection(e,d12s)
+	 then
 			e.wait=false
 		else e.wait=true
 		end
@@ -1043,6 +1165,7 @@ function  check_missiles(d)
 		if(m.owner==d)del(m_missiles,m)
 	end
 end
+
 -->8
 --combat functions
 
@@ -1166,11 +1289,42 @@ function manage_arrows()
 	end
 end
 
+function manage_row_cleaners()
+	for a in all(row_cleaners) do
+		a.x+=4
+		if t%2==0 then
+			local myp={
+				x=a.x,
+				y=a.y,
+				sx=0,
+				sy=0,
+				age=5,
+				size=7,
+				col=9,
+				trace=true
+			}
+			add(particles,myp)
+		end
+		if(a.x>128)del(row_cleaners,a)
+		local d=arrow_hitbox_detection(a)
+		if d then
+			kill(enemies,d)
+		end
+	end
+end
+
 function draw_arrows()
 	for a in all(arrows) do
 		spr(a.spr,a.x,a.y)
 	end
 end
+
+function draw_row_cleaners()
+	for m in all(row_cleaners) do
+		circfill(m.x,m.y,m.r,m.col)
+	end
+end
+
 
 function kill(t,i,side)
 	if(side=="ally")grid[i.cell].used=false
@@ -1229,12 +1383,22 @@ end
 --wave logic
 
 function manage_waves()
+	if lives<=0 and mode!="over" then 
+		mode="over"
+		c_pause=cocreate(pause)
+	end
 	if mode=="wave" then
 	 if c_pause and costatus(c_pause)!="dead"then
 			coresume(c_pause)
 		else
 			mode="game"
 			c_pause=nil
+		end
+	elseif (mode=="over" or mode=="win") and not loop then
+		if c_pause and costatus(c_pause)!="dead"then
+			coresume(c_pause)		
+		else
+			loop=true
 		end
 	elseif mode=="horde" then
 		if c_pause and costatus(c_pause)!="dead"then
@@ -1243,24 +1407,30 @@ function manage_waves()
 			coresume(c_horde)
 		else
 			mode="game"
-			has_horde=true
 			c_pause=nil
 			c_horde=nil
+			has_horde=true
 		end
+	else
+		if (mode!="over")	check_wave()
 	end
-	if enemy_counter==0 and #enemies==0 then
+end
+
+function check_wave()
+	if #we==0 
+	and #enemies==0
+	and #d12s==0 then
 		if not has_horde then
 			mode="horde"
-			enemy_counter=10
 			c_pause=cocreate(pause)
 			c_horde=cocreate(spawn_horde)
 		else
-			if wave==2 then
+			if wave==3 then
 				mode="win"
+				c_pause=cocreate(pause)
 			else
 				has_horde=false
 				wave+=1
-				enemy_counter=15
 				c_pause=cocreate(pause)
 				mode="wave"
 			end
@@ -1362,7 +1532,6 @@ function manage_particles()
 		else
 			if(p.age<=0 and not p.trace)p.size-=1
 			if(p.age<=0 and p.trace)p.size-=.5
-
 			if(p.size<=0)del(particles,p)
 		end
 	end
@@ -1456,30 +1625,30 @@ function dust(d)
 	end	
 end
 __gfx__
-00000000001100000000000000110000000000000000000000000000000000000000000000000000000000000011000000000000000000000006600000000000
-000000000155100000000000015510000000000000000001100000000000000110000000001100011000000001bb100110000000000000000006600000000000
-00700700015551000000000001555111111000000000001bb10011000001001bb1000000017b1117710000001b77b11771000000000000000006600000000000
-0007700001551011110000000155119999110000000101bbbb114410001711bbbb1011001bbb3177771000001b77b17777100000dd0000700006600000000000
-000770000141119999110000014199999999100000171bbbbbb1744101777bbbbbb144101b3337777771000001bb177777710000044444770006600000000000
-00700700014199999999100001411666666100000177788666617141001418866661744101327786687710000144778668771000dd0000700006600000000000
-000000000141166666611000014116666661100000141886666f7f41001418866661714101557886688710000144788668871000000000000006600000000000
-00000000014ff666666ff100014ff668866ff10000141668866171f10014f668866f7f4101447668866710000144766886671000000000000006600000000000
-088008801f4f16688661ff101f4f16688661ff100014f66886617141001f1668866171f101447668866710000144766886671000760000000000006700000000
-888888881e4f16688661ef101e4f16666661ef10001f166668817141001416666881714101447886688710000144788668871000760000000000006700000000
-88888888014116666661110001411666666111000014166668817441001416666881714101447786687771000144778668777100760000000000006700000000
-888888880141066666610000014101f11f100000001411f11f11441001d4d1f11f11744101441177771ef10001441177771ef100760000000000006700000000
-08888880014101f11f100000014101f11f10000001d4d1f11f10110001d1d1f11f11441001441177771110000144117777111000760000000000006700000000
-0888888001411ff11ff1000001411ff11ff1000001d1dff11ff1000000101ff11ff1110001441777777100000144177777710000760000000000006700000000
-00888800001001100110000000100110011000000010111001100000000001100110000001447777777710000011777777771000760000000000006700000000
-00088000000000000000000000000000000000000000000000000000000000000000000000111111111100000000111111110000760000000000006700000000
-088008800000000000000010000000000000001000000000000000000000000000000000aaaaaa0000aaaaaa0777777777777777777007777777777000000000
-811881180000001111000171000000000000017100000001100000000000000110000000a99990000009999a7766666666666666667777666666667700000000
-81111118000001ddd610177100000011110017710000001d610000000000001d61000000a90000000000009a7660000000000000006666000000066700000000
-8111111800001ddddd611771000001ddd6101771000001ddd6100000000001ddd6100000a90000000000009a7600000000000000000660000000006700000000
-081111800001ddddddd6177100001ddddd61177100001ddddd61110000001ddddd611110a90000000000009a7600000000000000000660000000006700000000
-081111800001d88dd66d17710001ddddddd617710001d886644444100001d88668444441a00000000000000a7600000000000000000660000000006700000000
-008118000001d88dd66d17710001d88dd66d17710001d886647474100001d8866847474100000000000000007600000000000000000660000000006700000000
-0008800000011666666117710001d88dd66d17710001166664444410000116666644444100000000000000007600000000000000000660000000006700000000
+00000000001100000000000000110000000000000000000000000000000000000000000000000000000000000011000000000000000000000006600010101010
+000000000155100000000000015510000000000000000001100000000000000110000000001100011000000001bb100110000000000000000006600001010101
+00700700015551000000000001555111111000000000001bb10011000001001bb1000000017b1117710000001b77b11771000000000000000006600010101010
+0007700001551011110000000155119999110000000101bbbb114410001711bbbb1011001bbb3177771000001b77b17777100000dd0000700006600001010101
+000770000141119999110000014199999999100000171bbbbbb1744101777bbbbbb144101b3337777771000001bb177777710000044444770006600010101010
+00700700014199999999100001411666666100000177788666617141001418866661744101327786687710000144778668771000dd0000700006600001010101
+000000000141166666611000014116666661100000141886666f7f41001418866661714101557886688710000144788668871000000000000006600010101010
+00000000014ff666666ff100014ff668866ff10000141668866171f10014f668866f7f4101447668866710000144766886671000000000000006600001010101
+011001101f4f16688661ff101f4f16688661ff100014f66886617141001f1668866171f101447668866710000144766886671000760000000000006700000000
+188118811e4f16688661ef101e4f16666661ef10001f166668817141001416666881714101447886688710000144788668871000760000000000006700000000
+18888881014116666661110001411666666111000014166668817441001416666881714101447786687771000144778668777100760000000000006700000000
+188888810141066666610000014101f11f100000001411f11f11441001d4d1f11f11744101441177771ef10001441177771ef100760000000000006700000000
+01888810014101f11f100000014101f11f10000001d4d1f11f10110001d1d1f11f11441001441177771110000144117777111000760000000000006700000000
+0188881001411ff11ff1000001411ff11ff1000001d1dff11ff1000000101ff11ff1110001441777777100000144177777710000760000000000006700000000
+00188100001001100110000000100110011000000010111001100000000001100110000001447777777710000011777777771000760000000000006700000000
+00011000000000000000000000000000000000000000000000000000000000000000000000111111111100000000111111110000760000000000006700000000
+011001100000000000000010000000000000001000000000000000000000000000000000aaaaaa0000aaaaaa0777777777777777777007777777777000000000
+122112210000001111000171000000000000017100000001100000000000000110000000a99990000009999a7766666666666666667777666666667700000000
+12222221000001ddd610177100000011110017710000001d610000000000001d61000000a90000000000009a7660000000000000006666000000066700000000
+1222222100001ddddd611771000001ddd6101771000001ddd6100000000001ddd6100000a90000000000009a7600000000000000000660000000006700000000
+012222100001ddddddd6177100001ddddd61177100001ddddd61110000001ddddd611110a90000000000009a7600000000000000000660000000006700000000
+012222100001d88dd66d17710001ddddddd617710001d886644444100001d88668444441a00000000000000a7600000000000000000660000000006700000000
+001221000001d88dd66d17710001d88dd66d17710001d886647474100001d8866847474100000000000000007600000000000000000660000000006700000000
+0001100000011666666117710001d88dd66d17710001166664444410000116666644444100000000000000007600000000000000000660000000006700000000
 00000000001dd666666dd771001116666661d7710001d66664747410001dd6666647474100000000000000007600000000000000000660000000006700000000
 00a00000016d166668811441016dd666666d14410016d88668474100016d18866884741000000000000000007600000000000000000660000000006700000000
 00aaa00001d51666688114d101d51666688114d1001d58866844410001d5188668844410a00000000000000a7600000000000000000660000000006700000000
