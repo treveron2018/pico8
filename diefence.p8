@@ -7,9 +7,11 @@ __lua__
 --todo
 --final boss
 --fb music
+--evil dice
+----halo
 
 function _init()
-	version="1.5"
+	version="2.0"
 	mode="title"
 	is_easy=false
 	blinkt=0
@@ -138,7 +140,9 @@ function start_game()
 	if(diff_pos[current_dpos].diff=="easy")is_easy=true
 	t=0
 	rnd_tiles()
-	mode="wave"
+	--mode=="wave"
+	--boss test
+	mode="boss_w"
 	p_rolls=0
 	if is_easy then 
 		mode="easy"
@@ -181,7 +185,8 @@ function start_game()
 	wave_enemies={
 		{4,4,4,4,4,4,4,4,4,4},
 		{4,4,4,4,4,4,4,8,8,8,8,8,8,8,8},
-		{4,4,4,4,4,4,4,12,12,8,8,8,8,8,8,8,8}
+		{4,4,4,4,4,4,4,12,12,8,8,8,8,8,8,8,8},
+		{4,4,4,4,4,8,8,12,12,12,12,8,8,8,8,8,8,8,8}
 	}
 	
 	enemies={}
@@ -255,6 +260,9 @@ function update_game()
 	manage_fire()
 	manage_row_cleaners()
 	camera_shake()
+	if mode=="boss" then
+		manage_boss()
+	end
 end
 
 function draw_game()
@@ -277,6 +285,9 @@ function draw_game()
 	draw_row_cleaners()
 	draw_ci()
 	if(die_loaded)preview()
+	if mode=="boss" then
+		draw_boss()
+	end
 end
 -->8
 --grid functions
@@ -397,9 +408,9 @@ function animate_roll()
 	if(ui_dice>6)ui_dice=1 
 	if die_ani>=30 then
 	sfx(19)
-		ui_dice=flr(rnd(6))+1
---	local test={1,6}
---	ui_dice=rnd(test)
+		--ui_dice=flr(rnd(6))+1
+		--local test={1,6}
+		ui_dice=1
 		small_explosion(ui_dicex+4,ui_dicey+4)
 		while (#dice==0 or p_rolls>0) 
 		and ui_dice==6 do
@@ -430,6 +441,9 @@ function right_ui()
 	elseif mode=="horde" then
 		t2="horde incoming!"
 		print(t2,ruix,ruiy_l2,blink())	
+	elseif mode=="boss_w" then
+		t2="true evil approaching!"
+		print(t2,ruix,ruiy_l2,blink())		
 	elseif mode=="win" then
 		t1=[[soon...
 evil will approach]]
@@ -709,9 +723,14 @@ end
 
 function draw_dice()
 	for d in all(dice) do
+		local flp=false
 		if d.upgraded then
 			pal(6,1)
 			pal(8,10)
+		elseif d.evil then
+			pal(8,2)
+			pal(6,8)		
+			flp=true
 		end
 		local myspr=0
 		if d.ani<=10 then
@@ -719,7 +738,7 @@ function draw_dice()
 		else
 			myspr=d.spr2
 		end
-		spr(myspr,d.x,d.y,2,2)
+		spr(myspr,d.x,d.y,2,2,flp)
 		pal()
 	end
 end
@@ -750,7 +769,12 @@ function manage_dice()
 end
 
 function manage_cqc(d2)			
-	local d=ally_hitbox_detection(d2)
+	local d=nil
+	if not d2.evil then
+		d=ally_hitbox_detection(d2)
+	else
+		d=enemy_hitbox_detection(d2,dice)	
+	end
 	if d!=nil then
 		attack(d2,d,"ally")
 	end
@@ -760,13 +784,17 @@ function manage_3s(d3)
 	d3.att_t-=1
 	if(d3.att_t<=0)then
 		local arrow={
-			x=d3.x,
-			y=d3.y+5,
+			x=d3.x+14,
+			y=d3.y+4,
 			att=5,
 			att_t=0,
 			rate=0
 		}
 		arrow.spr=13
+		if d3.evil then 
+			arrow.evil=true
+			arrow.x=d3.x-6
+		end
 		add(arrows,arrow)
 		d3.att_t=d3.rate
 		sfx(15)
@@ -1012,7 +1040,7 @@ end
 
 function manage_d4s(d4)			
 	local d=enemy_hitbox_detection(d4,dice)
-	if not d then
+	if not d or d4.wait then
 		d4.combat=false
 	else
 		d4.combat=true
@@ -1175,7 +1203,11 @@ function wait(e)
 		and not enemy_hitbox_detection(e,d12s)
 	 then
 			e.wait=false
-		else e.wait=true
+		elseif enemy_hitbox_detection(e,dice)	then
+		 local obj=enemy_hitbox_detection(e,dice)
+		 if(obj.evil)e.wait=true
+		else
+		 e.wait=true
 		end
 end
 
@@ -1219,24 +1251,31 @@ function ally_hitbox_detection(ch,is_long)
 		y2=ch.y+12
 	}
 	for d in all(enemies) do
-		local d_hitbox={
-			x1=d.x,
-			y1=d.y+8,
-			x2=d.x+8,
-			y2=d.y+10
-		}
+		local d_hitbox=set_hitbox(d)
 		if (col(hitbox,d_hitbox))obj=d
 	end
 	for d in all(d12s) do
-		local d_hitbox={
-			x1=d.x,
-			y1=d.y+8,
-			x2=d.x+8,
-			y2=d.y+10
-		}
+		local d_hitbox=set_hitbox(d)
 		if (col(hitbox,d_hitbox))obj=d
 	end
+	for d in all(dice) do
+		local d_hitbox=set_hitbox(d)
+		if col(hitbox,d_hitbox)then
+			obj=d
+			if(not obj.evil)obj=nil
+		end
+	end
 	return obj
+end
+
+function set_hitbox(d)
+	local hitbox={
+		x1=d.x,
+		y1=d.y+8,
+		x2=d.x+8,
+		y2=d.y+10
+	}
+	return hitbox
 end
 
 function arrow_hitbox_detection(a)
@@ -1247,23 +1286,44 @@ function arrow_hitbox_detection(a)
 		x2=a.x+7,
 		y2=a.y+6
 	}
-	for d in all(enemies) do
-		local d_hitbox={
-			x1=d.x,
-			y1=d.y,
-			x2=d.x+15,
-			y2=d.y+15
-		}
-		if (col(hitbox,d_hitbox))obj=d
-	end
-	for d in all(d12s) do
-		local d_hitbox={
-			x1=d.x,
-			y1=d.y,
-			x2=d.x+15,
-			y2=d.y+15
-		}
-		if (col(hitbox,d_hitbox))obj=d
+	if a.evil then
+		for d in all(dice) do
+			local d_hitbox={
+				x1=d.x,
+				y1=d.y,
+				x2=d.x+15,
+				y2=d.y+15
+			}
+			if (col(hitbox,d_hitbox))obj=d
+		end	
+	else
+		for d in all(dice) do
+			local d_hitbox={
+				x1=d.x,
+				y1=d.y,
+				x2=d.x+15,
+				y2=d.y+15
+			}
+			if (d.evil and col(hitbox,d_hitbox))obj=d
+		end
+		for d in all(enemies) do
+			local d_hitbox={
+				x1=d.x,
+				y1=d.y,
+				x2=d.x+15,
+				y2=d.y+15
+			}
+			if (col(hitbox,d_hitbox))obj=d
+		end
+		for d in all(d12s) do
+			local d_hitbox={
+				x1=d.x,
+				y1=d.y,
+				x2=d.x+15,
+				y2=d.y+15
+			}
+			if (col(hitbox,d_hitbox))obj=d
+		end
 	end
 	return obj
 end
@@ -1298,8 +1358,12 @@ end
 
 function manage_arrows()
 	for a in all(arrows) do
-		a.x+=2
-		if(a.x>128)del(arrows,a)
+		if a.evil then
+			a.x-=2
+		else
+			a.x+=2
+		end
+		if(a.x>128 or a.x<=-8)del(arrows,a)
 		local d=arrow_hitbox_detection(a)
 		if d then
 			attack(a,d,"arrow")
@@ -1335,7 +1399,8 @@ end
 
 function draw_arrows()
 	for a in all(arrows) do
-		spr(a.spr,a.x,a.y)
+		local flp=a.evil
+		spr(a.spr,a.x,a.y,1,1,flp)
 	end
 end
 
@@ -1422,13 +1487,17 @@ function manage_waves()
 		else
 			loop=true
 		end
-	elseif mode=="horde" then
+	elseif mode=="horde" or mode=="boss_w" then
 		if c_pause and costatus(c_pause)!="dead"then
 			coresume(c_pause)			
 		elseif c_horde and costatus(c_horde)!="dead"then
 			coresume(c_horde)
 		else
-			mode="game"
+			if mode=="horde"then
+				mode="game"
+			else
+				mode="boss"
+			end
 			c_pause=nil
 			c_horde=nil
 			has_horde=true
@@ -1442,7 +1511,10 @@ function check_wave()
 	if #we==0 
 	and #enemies==0
 	and #d12s==0 then
-		if not has_horde then
+		if wave==4 then
+			mode="boss_w"
+			sfx(21,0,4)
+		elseif not has_horde then
 			mode="horde"
 			sfx(21,0,4)
 			c_pause=cocreate(pause)
@@ -1648,6 +1720,79 @@ function dust(d)
 		add(particles,myp)
 	end	
 end
+-->8
+--boss
+boss={
+	x=108,
+	y=46,
+	hp=300,
+	phase=2,
+	spr1=76,
+	spr2=78,
+	timer=0,
+	beam_in=false,
+	beam_out=false,
+	isin=false,
+	isout=false,
+	target=nil
+}
+
+function manage_boss()
+	if boss.phase==1 then
+		boss.phase=2		
+		boss.timer=0
+	elseif boss.phase==2 then
+		boss.timer+=1
+		if not boss.target and #dice>0 then
+			boss.target=rnd(dice)
+			boss.timer=0
+		else
+			if boss.timer%5==0 then
+				local sh={
+						x=boss.x+7,
+						y=boss.y+7,
+						r=2,
+						tr=20,
+						col=2,
+						spd=1
+				}
+				add(shwaves,sh)	
+				local sh2={
+						x=boss.target.x+7,
+						y=boss.target.y+7,
+						r=20,
+						tr=2,
+						col=2,
+						spd=1
+				}
+				add(shwaves,sh2)					
+			end
+		if boss.timer>=150 then
+			boss.timer=0
+			boss.target.evil=true
+			boss.target.upgrade=false
+			boss.target.hp=boss.target.maxhp
+			boss.phase=3
+		end
+		end
+	end
+end
+
+function draw_boss()
+	--test
+--	rectfill(boss.x-2,0,boss.x+17,boss.y+16,7)
+--	ovalfill(boss.x-2,boss.y+14,boss.x+17,boss.y+18,7)
+	spr(boss.spr1,boss.x,boss.y,2,2)
+
+end
+
+function update_beam(inout)
+
+end
+
+function draw_beam()
+
+end
 __gfx__
 00000000001100000000000000110000000000000000000000000000000000000000000000000000000000000011000000000000000000000006600010101010
 000000000155100000000000015510000000000000000001100000000000000110000000001100011000000001bb100110000000000000000006600001010101
@@ -1845,7 +1990,7 @@ __label__
 
 __map__
 5100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-6156575856585857585756585857567100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+6156575856585857585756015857567100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 6152525252525252525252525252625b00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 6152525252525252525252525252635b00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 6152525252525252525252525252735b00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -1886,6 +2031,7 @@ b10600002a7502d7503075032750367503775023700267002a7502d7503075032750367503775020
 91020000186501e65022650266502b7502f7502f7502e7502c75028750247501a7500f75000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0003000000500005202d520235201e5201c5201a5101952019520195201a5201d52023520295202f5203551038510005000050000500005000050000500005000050000500005000050000500005000050000500
 000200002c75027750217501c75017750127500e7500a750067500275000750000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+011200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c02300000000000c023000003c6003c6153c615
 __music__
 01 00074344
 00 01024444
@@ -1899,6 +2045,6 @@ __music__
 00 01024344
 00 00070844
 00 01020344
-00 00070944
-02 01024344
+00 00470944
+02 01194344
 
