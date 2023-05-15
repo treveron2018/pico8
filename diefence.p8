@@ -6,9 +6,11 @@ __lua__
 
 --todo
 --final boss
+----shoot fireball
+----spawn d4
+----boss death
 --fb music
---evil dice
-----halo
+--title screen
 
 function _init()
 	version="2.0"
@@ -137,6 +139,7 @@ end
 
 function start_game()
 	music(0,0,7)
+	is_easy=false
 	if(diff_pos[current_dpos].diff=="easy")is_easy=true
 	t=0
 	rnd_tiles()
@@ -262,6 +265,7 @@ function update_game()
 	camera_shake()
 	if mode=="boss" then
 		manage_boss()
+		manage_orbs()
 	end
 end
 
@@ -276,8 +280,13 @@ function draw_game()
 	draw_dice()
 	draw_enemies()
 	draw_d12s()
+	if mode=="boss" then
+		draw_boss()
+		if(boss.beaming)draw_beam()
+	end
 	draw_particles()
 	draw_missiles()
+	draw_orbs()
 	draw_att_ani()
 	draw_arrows()
 	draw_shwaves()
@@ -285,9 +294,6 @@ function draw_game()
 	draw_row_cleaners()
 	draw_ci()
 	if(die_loaded)preview()
-	if mode=="boss" then
-		draw_boss()
-	end
 end
 -->8
 --grid functions
@@ -409,8 +415,8 @@ function animate_roll()
 	if die_ani>=30 then
 	sfx(19)
 		--ui_dice=flr(rnd(6))+1
-		--local test={1,6}
-		ui_dice=1
+	--	local test={1,6}
+		ui_dice=3
 		small_explosion(ui_dicex+4,ui_dicey+4)
 		while (#dice==0 or p_rolls>0) 
 		and ui_dice==6 do
@@ -459,7 +465,7 @@ evil will approach]]
 			t1="upgrade die!"
 			t3="❎ for free reroll"
 			local d=get_die()
-			if d then
+			if d and not d.evil then
 				if d.upgraded then
 					t1="full health!"
 				elseif d.type==1 then 
@@ -638,7 +644,9 @@ function set_dice()
 				end
 				return
 			elseif c.selected and c.used and not replacing then
-				replacing=true
+				local d=get_die()
+				if(not d)return --sfx
+				if(not d.evil)replacing=true
 				return
 			end
 		end
@@ -670,7 +678,7 @@ end
 function upgrade()
 	if btnp(🅾️) then
 		local d=get_die()
-		if d and not d.upgraded then
+		if d and not d.upgraded and not d.evil then
 			d.upgraded=true
 			d.maxhp*=1.5
 			d.hp=d.maxhp			
@@ -746,7 +754,7 @@ end
 function count_d1s()
 	local d1s=0
 	for d in all(dice) do
-		if d.type==1 then
+		if d.type==1 and not d.evil then
 			if d.upgraded then
 				d1s+=2
 			else
@@ -806,12 +814,14 @@ function manage_5s(d5)
 	if d5.att_t<=0 then
 		priest_hitbox_detection(d5)
 		d5.att_t=d5.rate
+		local mycol=11
+		if(d5.evil)mycol=8
 		local sh={
 			x=d5.x+8,
 			y=d5.y+8,
 			r=2,
 			tr=20,
-			col=11,
+			col=mycol,
 			spd=2
 		}
 		add(shwaves,sh)	
@@ -828,31 +838,26 @@ function priest_hitbox_detection(p)
 		y2=p.y+23,
 	}
 	for e in all(enemies)do
-		local ehb={
-			x1=e.x,
-			y1=e.y,
-			x2=e.x+15,
-			y2=e.y+15
-		}
-		if(col(hb,ehb)) halo_attack(p,e)
+		local ehb=set_hitbox_2(e)
+		if(col(hb,ehb)and not p.evil) halo_attack(p,e)
 	end
 	for e in all(d12s)do
-		local ehb={
-			x1=e.x,
-			y1=e.y,
-			x2=e.x+15,
-			y2=e.y+15
-		}
-		if(col(hb,ehb)) halo_attack(p,e)
+		local ehb=set_hitbox_2(e)
+		if(col(hb,ehb)and not p.evil) halo_attack(p,e)
 	end
 	for d in all(dice)do
-		local dhb={
-			x1=d.x,
-			y1=d.y,
-			x2=d.x+15,
-			y2=d.y+15
-		}
-		if(col(hb,dhb))	heal(p,d)
+		local dhb=set_hitbox_2(d)
+		if col(hb,dhb)then
+			if(not p.evil and not d.evil)then
+				heal(p,d)
+			else
+			 if(p.cell!=d.cell)halo_attack(p,d)
+			end
+		end
+	end
+	if boss.isin then
+		local bhb=set_hitbox_2(boss)
+		if(col(hb,bhb) and not p.evil)halo_attack(p,boss)
 	end
 end
 
@@ -1265,6 +1270,10 @@ function ally_hitbox_detection(ch,is_long)
 			if(not obj.evil)obj=nil
 		end
 	end
+	if boss.isin then
+		local bhb=set_hitbox(boss)
+		if (col(hitbox,bhb))obj=boss
+	end
 	return obj
 end
 
@@ -1274,6 +1283,16 @@ function set_hitbox(d)
 		y1=d.y+8,
 		x2=d.x+8,
 		y2=d.y+10
+	}
+	return hitbox
+end
+
+function set_hitbox_2(d)
+	local hitbox={
+		x1=d.x,
+		y1=d.y,
+		x2=d.x+15,
+		y2=d.y+15
 	}
 	return hitbox
 end
@@ -1288,42 +1307,26 @@ function arrow_hitbox_detection(a)
 	}
 	if a.evil then
 		for d in all(dice) do
-			local d_hitbox={
-				x1=d.x,
-				y1=d.y,
-				x2=d.x+15,
-				y2=d.y+15
-			}
+			local d_hitbox=set_hitbox_2(d)
 			if (col(hitbox,d_hitbox))obj=d
 		end	
 	else
 		for d in all(dice) do
-			local d_hitbox={
-				x1=d.x,
-				y1=d.y,
-				x2=d.x+15,
-				y2=d.y+15
-			}
+			local d_hitbox=set_hitbox_2(d)
 			if (d.evil and col(hitbox,d_hitbox))obj=d
 		end
 		for d in all(enemies) do
-			local d_hitbox={
-				x1=d.x,
-				y1=d.y,
-				x2=d.x+15,
-				y2=d.y+15
-			}
+			local d_hitbox=set_hitbox_2(d)
 			if (col(hitbox,d_hitbox))obj=d
 		end
 		for d in all(d12s) do
-			local d_hitbox={
-				x1=d.x,
-				y1=d.y,
-				x2=d.x+15,
-				y2=d.y+15
-			}
+			local d_hitbox=set_hitbox_2(d)
 			if (col(hitbox,d_hitbox))obj=d
 		end
+		if boss.isin then
+		local bhb=set_hitbox_2(boss)
+		if (col(hitbox,bhb))obj=boss
+	end
 	end
 	return obj
 end
@@ -1726,25 +1729,61 @@ boss={
 	x=108,
 	y=46,
 	hp=300,
-	phase=2,
-	spr1=76,
-	spr2=78,
+	phase=1,
+	sp=78,
 	timer=0,
-	beam_in=false,
-	beam_out=false,
+	beaming=false,
 	isin=false,
-	isout=false,
-	target=nil
+	isatt=false,
+	target=nil,
+	intro=true
+}
+beam={
+	x1=boss.x+8,
+	y1=0,
+	x2=boss.x+8,
+	y2=boss.y+16
 }
 
+c_beam=nil
+orbs={}
+
 function manage_boss()
-	if boss.phase==1 then
-		boss.phase=2		
-		boss.timer=0
+	if (boss.hp<=0)kill_boss()
+	if not boss.isatt then
+		boss.beaming=true
+		if(c_beam==nil)c_beam=cocreate(update_beam)
+		if(c_pause==nil)c_pause=cocreate(pause)	 
+	 if c_beam and costatus(c_beam)!="dead"then
+			coresume(c_beam)
+		else
+			boss.beaming=false
+			if c_pause and costatus(c_pause)!="dead"then
+				coresume(c_pause)
+			else
+				c_pause=nil
+				c_beam=nil
+				boss.timer=0
+				if boss.isin then
+					boss.isatt=true
+					boss.phase+=1
+					boss.sp=76
+					if(boss.phase>4)boss.phase=2
+				end
+			end
+		end
 	elseif boss.phase==2 then
+		if(c_beam==nil)c_beam=cocreate(update_beam)
+		if(c_pause==nil)c_pause=cocreate(pause)	 
 		boss.timer+=1
-		if not boss.target and #dice>0 then
+		if #dice==0 or check_evil()then
+			boss.isatt=false
+			boss.sp=78
+		elseif  not boss.target then
 			boss.target=rnd(dice)
+			while boss.target.evil do
+				boss.target=rnd(dice)
+			end
 			boss.timer=0
 		else
 			if boss.timer%5==0 then
@@ -1767,31 +1806,130 @@ function manage_boss()
 				}
 				add(shwaves,sh2)					
 			end
-		if boss.timer>=150 then
-			boss.timer=0
-			boss.target.evil=true
-			boss.target.upgrade=false
-			boss.target.hp=boss.target.maxhp
-			boss.phase=3
+			if boss.timer>=150 then
+				boss.timer=0
+				boss.target.evil=true
+				boss.target.upgrade=false
+				boss.target.hp=boss.target.maxhp
+				boss.target=nil
+				boss.beaming=true
+				boss.isatt=false	
+				boss.sp=78
+			end
 		end
+	elseif boss.phase==3 then
+		--todo
+		--fireball
+		boss.timer+=1
+		if boss.timer%10==0 then
+			local myorb={
+				d=20,
+				angle=rnd(),
+				r=rnd(2)+1,
+				col=2
+			}
+			add(orbs,myorb)
 		end
+		
+		--
+		boss.msg="fireball"
+--		boss.sp=78
+--		boss.isatt=false
+	elseif boss.phase==4 then
+		--todo
+		--spawn d4
+		boss.msg="spawn d4"
+		boss.sp=78
+		boss.isatt=false
 	end
 end
 
 function draw_boss()
-	--test
---	rectfill(boss.x-2,0,boss.x+17,boss.y+16,7)
---	ovalfill(boss.x-2,boss.y+14,boss.x+17,boss.y+18,7)
-	spr(boss.spr1,boss.x,boss.y,2,2)
-
+	if(boss.isin)spr(boss.sp,boss.x,boss.y,2,2)
+	--print(boss.x.." "..boss.y,boss.x,boss.y,7)
 end
 
-function update_beam(inout)
-
+function update_beam()
+	for i=1, 4 do
+		beam.x1-=i
+		beam.x2+=i
+		yield()
+	end
+	boss.isin=not boss.isin
+	boss.intro=false
+	for i=1, 4 do
+		beam.x1+=i
+		beam.x2-=i
+		yield()
+	end
+	boss.beaming=false
+	if (not boss.isin)boss_location()
+	beam.x1=boss.x+8
+	beam.x2=boss.x+8
+	beam.y2=boss.y+16
 end
 
 function draw_beam()
+	rectfill(beam.x1-2,beam.y1,beam.x2+2,beam.y2,3)
+	rectfill(beam.x1,beam.y1,beam.x2,beam.y2,2)
+end
 
+function check_evil()
+	for d in all(dice) do
+		if(not d.evil)return false
+	end
+	return true
+end
+
+function boss_location()
+	local loc={
+		{diex=108,diey=10},
+		{diex=108,diey=28},
+		{diex=108,diey=46},
+		{diex=108,diey=64},
+		{diex=108,diey=82}
+	}
+	for c in all(grid) do
+		if(not c.used and c.x>10)add(loc,c)
+		if(c.diex==boss.x and c.diey==boss.y)c.used=false
+	end
+	
+	local newloc=rnd(loc)
+	boss.x=newloc.diex
+	boss.y=newloc.diey
+	if(newloc.id)newloc.used=true
+end
+
+function kill_boss()
+	mode="win"
+end
+
+function manage_orbs()
+ for o in all(orbs) do
+ 	o.d-=1
+ 	if(o.d<=0)del(orbs,o)
+		o.x=sin(o.angle)*o.d+boss.x
+ 	o.y=cos(o.angle)*o.d+boss.y
+ 	if t%3==0 then
+			local myp={
+				x=o.x,
+				y=o.y,
+				sx=0,
+				sy=0,
+				age=5,
+				size=o.r+1,
+				col=1,
+				trace=true
+			}
+			add(particles,myp)
+		end
+ end
+end
+
+function draw_orbs()
+	for o in all(orbs) do
+		circfill(o.x,o.y,o.r,o.col)
+ end	
 end
 __gfx__
 00000000001100000000000000110000000000000000000000000000000000000000000000000000000000000011000000000000000000000006600010101010
@@ -1812,14 +1950,14 @@ __gfx__
 00011000000000000000000000000000000000000000000000000000000000000000000000111111111100000000111111110000760000000000006700000000
 011001100000000000000010000000000000001000000000000000000000000000000000aaaaaa0000aaaaaa0777777777777777777007777777777000000000
 122112210000001111000171000000000000017100000001100000000000000110000000a99990000009999a7766666666666666667777666666667700000000
-12222221000001ddd610177100000011110017710000001d610000000000001d61000000a90000000000009a7660000000000000006666000000066700000000
-1222222100001ddddd611771000001ddd6101771000001ddd6100000000001ddd6100000a90000000000009a7600000000000000000660000000006700000000
-012222100001ddddddd6177100001ddddd61177100001ddddd61110000001ddddd611110a90000000000009a7600000000000000000660000000006700000000
-012222100001d88dd66d17710001ddddddd617710001d886644444100001d88668444441a00000000000000a7600000000000000000660000000006700000000
+12222221000001ddd710177100000011110017710000001d710000000000001d71000000a90000000000009a7660000000000000006666000000066700000000
+1222222100001ddddd711771000001ddd7101771000001ddd7100000000001ddd7100000a90000000000009a7600000000000000000660000000006700000000
+012222100001ddddddd7177100001ddddd71177100001ddddd71110000001ddddd711110a90000000000009a7600000000000000000660000000006700000000
+012222100001d88dd66d17710001ddddddd717710001d886644444100001d88668444441a00000000000000a7600000000000000000660000000006700000000
 001221000001d88dd66d17710001d88dd66d17710001d886647474100001d8866847474100000000000000007600000000000000000660000000006700000000
 0001100000011666666117710001d88dd66d17710001166664444410000116666644444100000000000000007600000000000000000660000000006700000000
 00000000001dd666666dd771001116666661d7710001d66664747410001dd6666647474100000000000000007600000000000000000660000000006700000000
-00a00000016d166668811441016dd666666d14410016d88668474100016d18866884741000000000000000007600000000000000000660000000006700000000
+00a00000016d166668811441016dd666666d14410017d88668474100017d18866884741000000000000000007600000000000000000660000000006700000000
 00aaa00001d51666688114d101d51666688114d1001d58866844410001d5188668844410a00000000000000a7600000000000000000660000000006700000000
 00aaaa00001101d11d1014100011166668811410000111d11d474100001101d11d147410a90000000000009a7600000000000000000660000000006700000000
 00aaa000000001d11d100100000001d11d100100000001d11d141000000001d11d114100a90000000000009a7600000000000000000660000000006700000000
@@ -1990,7 +2128,7 @@ __label__
 
 __map__
 5100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-6156575856585857585756015857567100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+6156575856585857585756565857567100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 6152525252525252525252525252625b00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 6152525252525252525252525252635b00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 6152525252525252525252525252735b00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
