@@ -10,7 +10,7 @@ __lua__
 
 --todo
 --final boss
-----boss death
+----sfx
 --fb music
 
 function _init()
@@ -90,15 +90,10 @@ function draw_title()
 	map(16)
 	draw_title_dice()
 	draw_fire()
---	local title_string="❎/🅾️ start game"
---	if(current_dpos==3)title_string="❎/🅾️ how to play"
--- print("die-fence",44,43,blink())
---	print(title_string,29,85,7)
 	for opt in all(diff_pos) do
 		print(opt.diff,opt.x+8,opt.y+1,9)
 	end 
 	spr(48,diff_pos[current_dpos].x,diff_pos[current_dpos].y)
---	if(current_dpos==2)print("with 5 free dice!",28,94,7)
 	print("v "..version,1,1,7)
 	print("by @trevvieaamb",65,120,7)
 end
@@ -223,9 +218,7 @@ function start_game()
 	upgrading=false	
 	particles={}
 	fire()
-
-	--debug
-
+	init_boss()
 end
 
 function update_game()
@@ -273,10 +266,10 @@ function update_game()
 	manage_fire()
 	manage_row_cleaners()
 	manage_fireball()
+	manage_orbs()
 	camera_shake()
 	if mode=="boss" then
 		manage_boss()
-		manage_orbs()
 	end
 end
 
@@ -426,9 +419,7 @@ function animate_roll()
 	if(ui_dice>6)ui_dice=1 
 	if die_ani>=30 then
 	sfx(19)
-		--ui_dice=flr(rnd(6))+1
-	--	local test={1,6}
-		ui_dice=3
+		ui_dice=flr(rnd(6))+1
 		small_explosion(ui_dicex+4,ui_dicey+4)
 		while (#dice==0 or p_rolls>0) 
 		and ui_dice==6 do
@@ -463,8 +454,8 @@ function right_ui()
 		t2="true evil approaching!"
 		print(t2,ruix,ruiy_l2,blink())		
 	elseif mode=="win" then
-		t1=[[soon...
-evil will approach]]
+		t1=[[evil has been
+defeated!]]
 		print(t1,ruix,ruiy_l1,blink())
 	elseif mode=="over" then
 		t1="game over..."
@@ -1770,42 +1761,79 @@ function dust(d)
 end
 -->8
 --boss
-boss={
-	x=108,
-	y=46,
-	hp=300,
-	phase=1,
-	sp=78,
-	timer=0,
-	beaming=false,
-	isin=false,
-	isatt=false,
-	target=nil,
-	intro=true,
-	charge=false,
-	isboss=true
-}
-beam={
-	x1=boss.x+8,
-	y1=0,
-	x2=boss.x+8,
-	y2=boss.y+16
-}
-fireball={
-	r=5,
-	x=boss.x,
-	y=boss.y+8,
-	att=50,
-	active=false,
-	spd=3
-}
-
-c_beam=nil
-orbs={}
+function init_boss()
+	boss={
+		x=108,
+		y=46,
+		hp=10, --test
+		phase=1,
+		sp=78,
+		timer=0,
+		beaming=false,
+		isin=false,
+		isatt=false,
+		target=nil,
+		intro=true,
+		charge=false,
+		isboss=true
+	}
+	beam={
+		x1=boss.x+8,
+		y1=0,
+		x2=boss.x+8,
+		y2=boss.y+16
+	}
+	fireball={
+		r=5,
+		x=boss.x,
+		y=boss.y+8,
+		att=50,
+		active=false,
+		spd=3
+	}
+	
+	c_beam=nil
+	orbs={}
+end
 
 function manage_boss()
-	if (boss.hp<=0)kill_boss()
-	if not boss.isatt then
+	if boss.hp<=0 and not boss.isdead then
+		boss.isdead=true
+		boss.timer=0
+		boss.isin=false
+		music(-1,1000)
+	end
+	if boss.isdead then
+		boss.timer+=1
+		if boss.timer%15==0 then
+			shake=2
+			local myorb={
+				d=1,
+				angle=rnd(),
+				r=rnd(2)+1,
+				col=2,
+				dir=-1
+			}
+			add(orbs,myorb)
+		end
+		if boss.timer>=120 then
+			explode(boss,5)
+			local sh={
+				x=boss.x+7,
+				y=boss.y+7,
+				r=2,
+				tr=40,
+				col=2,
+				spd=1
+			}
+			add(shwaves,sh)	
+			shake=6
+			c_pause=nil
+			c_pause=cocreate(pause)
+			--win jingle
+			mode="win"
+		end
+	elseif not boss.isatt then
 		boss.beaming=true
 		if(c_beam==nil)c_beam=cocreate(update_beam)
 		if(c_pause==nil)c_pause=cocreate(pause)	 
@@ -1823,7 +1851,7 @@ function manage_boss()
 					boss.isatt=true
 					boss.phase+=1
 					boss.sp=76
-					if(boss.phase>4)boss.phase=2
+					if(boss.phase>4 and boss.hp>0)boss.phase=2
 				end
 			end
 		end
@@ -1880,7 +1908,8 @@ function manage_boss()
 				d=20,
 				angle=rnd(),
 				r=rnd(2)+1,
-				col=2
+				col=2,
+				dir=1
 			}
 			add(orbs,myorb)
 		end
@@ -1914,12 +1943,11 @@ function manage_boss()
 end
 
 function draw_boss()
-	if(boss.isin)spr(boss.sp,boss.x,boss.y,2,2)
+	if(boss.isin or boss.isdead)spr(boss.sp,boss.x,boss.y,2,2)
 	if boss.charge then		
 			circfill(boss.x,boss.y,boss.timer/30+2,1)
 			circfill(boss.x,boss.y,boss.timer/30,2)
 	end
-	--print(boss.x.." "..boss.y,boss.x,boss.y,7)
 end
 
 function update_beam()
@@ -1973,16 +2001,15 @@ function boss_location()
 	if(newloc.id)newloc.used=true
 end
 
-function kill_boss()
-	mode="win"
-end
-
 function manage_orbs()
  for o in all(orbs) do
- 	o.d-=1
- 	if(o.d<=0)del(orbs,o)
-		o.x=sin(o.angle)*o.d+boss.x
- 	o.y=cos(o.angle)*o.d+boss.y
+ 	o.d-=1*o.dir
+ 	if(o.d<=0 or o.d>20)del(orbs,o)
+
+		local offset=0
+		if(o.dir==-1)offset=8
+		o.x=sin(o.angle)*o.d+boss.x+offset
+ 	o.y=cos(o.angle)*o.d+boss.y+offset
  	if t%3==0 then
 			local myp={
 				x=o.x,
@@ -2311,6 +2338,9 @@ b10600002a7502d7503075032750367503775023700267002a7502d7503075032750367503775020
 0003000000500005202d520235201e5201c5201a5101952019520195201a5201d52023520295202f5203551038510005000050000500005000050000500005000050000500005000050000500005000050000500
 000200002c75027750217501c75017750127500e7500a750067500275000750000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 011200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c02300000000000c023000003c6003c6153c615
+010600000f140000000f140000000f140000000f140000000f140000000f140000000f140000000f140000000f140000000f140000000f1400000011140000001114000000111400000014140000001414000000
+010600001914000000191400000019140000001914000000191400000019140000001914000000191400000019140000001914000000191400000016140000001614000000161400000015140000001514000000
+010600001614000000161400000016140000001614000000161400000016140000001614000000161400000016140000000000000000000000000000000000000000000000000000000000000000000000000000
 __music__
 01 00074344
 00 01024444
@@ -2326,4 +2356,7 @@ __music__
 00 01020344
 00 00470944
 02 01194344
+01 1a424344
+00 1a424344
+00 1b424344
 
