@@ -6,6 +6,7 @@ __lua__
 
 --todo
 --optimize particle code
+--use arrays to optimize upgrades
 
 function _init()
 	version="2.0"
