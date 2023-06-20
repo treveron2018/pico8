@@ -13,17 +13,10 @@ function _init()
 	mob_att={1,1}
 	mob_hp={5,2}
 	wind={}
-	float={}
-	mob={}
-	_upd=update_game
-	_drw=draw_game
+	dpal={0,1,1,2,1,13,6,4,4,9,3,13,1,13,14}
 	buttbuff=-1
 	talkwind=nil
-	
-	p=add_mob(1,8,96)
-	--test mob
-	add_mob(2,16,96)
-	add_mob(2,112,16)
+	start_game()
 end
 
 function _update60()
@@ -35,6 +28,25 @@ function _draw()
 	cls()
 	_drw()
 	drawind()
+	checkfade()
+end
+
+function start_game()
+	fadeperc=1
+	mob={}
+	dmob={}
+	float={}
+	p=add_mob(1,8,96)
+	--test mob
+	for x=0,15 do
+		for y=0, 15 do
+			if mget(x,y)==19 then
+				add_mob(2,x*8,y*8)
+			end
+		end
+	end
+	_upd=update_game
+	_drw=draw_game
 end
 
 function update_game()
@@ -46,17 +58,30 @@ function update_game()
 	else
 		if(buttbuff==-1)buttbuff=getbutt()
 		dobutt(buttbuff)
-		buttbuff=-1
 	end
 	upd_float()
+end
+
+function update_over()
+--	if btnp(4) then
+--		debug="works"
+--	end
+end
+
+function draw_over()
+	cls(2)
+	if btnp(4) or btnp(5) then
+		fadeout()
+		start_game()	
+	end
+	print("u ded",50,50,7)
 end
 
 function draw_game()
 	map()
 	draw_mob()
 	drw_float()
-	--oprint8(debug,0,0,8)
-	
+	--oprint8(mob[2].t,0,0,8)
 end
 -->8
 --player functions
@@ -79,25 +104,6 @@ function move_player(d)
 	_upd=update_pturn
 end
 
-function update_pturn()
-	if(buttbuff==-1)buttbuff=getbutt()
-	p.t=min(p.t+0.125,1)
-	p.mov(p)
-	if(p.t==1)_upd=update_game
-end
-
-function trig_bump(tle,destx,desty)
-	if tle==11 or tle==12 then
-		mset(destx,desty,3)
-	elseif tle==6 or tle==8 then
-		mset(destx,desty,tle+1)
-	elseif tle==10 then
-		mset(destx,desty,3)	
-	elseif tle==13 then
-		if(destx==6 and desty==9)show_msg("it begins...",120)
-		if(destx==11 and desty==1)show_lmsg({"invasion is afoot.","","gather datacards."})
-	end
-end
 -->8
 --tools
 
@@ -125,6 +131,7 @@ function dobutt(butt)
 	if butt<4 then
 		move_player(butt)
 	end
+	buttbuff=-1
 end
 
 function oprint8(t,x,y,c,c2)
@@ -132,6 +139,47 @@ function oprint8(t,x,y,c,c2)
 		print(t,x+dirx[i]/8,y+diry[i]/8,c2)
 	end
 	print(t,x,y,c)
+end
+
+function dist(fx,fy,tx,ty)
+	return sqrt((fx-tx)^2+(fy-ty)^2)
+end
+
+function fadein()
+	local p,kmax,col,k=flr(mid(0,fadeperc,1)*100)
+	for j=1,15 do
+		col=j
+		kmax=flr(p+(j*1.46))/22
+		for k=1, kmax do
+			col=dpal[col]
+		end
+		pal(j,col,1)
+	end
+end
+
+function fadeout(spd,_wait)
+	if(not spd)spd=.04
+	if(not _wait)_wait=0
+	repeat
+		fadeperc=min(fadeperc+spd,1)
+		fadein()
+		flip()
+	until fadeperc==1
+	wait(_wait)
+end
+
+function checkfade()
+	if fadeperc>0 then
+		fadeperc=max(fadeperc-.04,0)
+		fadein()
+	end
+end
+
+function wait(_wait)
+	repeat
+		_wait-=1
+		flip()
+	until _wait<0
 end
 -->8
 --ui
@@ -204,7 +252,6 @@ function addfloat(_x,_y,_txt,_c)
 end
 
 function upd_float()
-debug="yes"
 	for f in all(float) do
 		f.y+=(f.ty-f.y)/10
 		f.t+=1
@@ -246,13 +293,22 @@ end
 
 function draw_mob()
 	for m in all(mob) do
-		local col=10
-		if m.flash>0 then
-			m.flash-=1
-			col=7
-		end
-		draw_spr(m.ani[get_frame(m.ani)],m.x+m.ox,m.y+m.oy,col,m._flip)
+		drawmob(m)
+	end	
+	for m in all(dmob) do
+		m.dur-=1
+		if(m.dur<0)del(dmob,m)
+		if(sin(time()*8)>0)drawmob(m)
 	end
+end
+
+function drawmob(m)
+	local col=10
+	if m.flash>0 then
+		m.flash-=1
+		col=7
+	end
+	draw_spr(m.ani[get_frame(m.ani)],m.x+m.ox,m.y+m.oy,col,m._flip)
 end
 
 function getmob(x,y)
@@ -291,13 +347,13 @@ function mobwalk(m,dx,dy)
 end
 
 function mobbump(m,dx,dy)
-	mobflip(m,dx,dy)
+	mobflip(m,dx)
 	m.sox,m.soy,m.ox,m.oy=dx,dy,0,0				
 	m.mov=mov_bump
 	m.t=0
 end
 
-function mobflip(m,dx,dy)
+function mobflip(m,dx)
 	if dx<0 then
 		m._flip=true
 	elseif dx>0 then
@@ -321,10 +377,86 @@ function hitmob(attm,defm)
 	defm.flash=5
 	addfloat(defm.x, defm.y, "-"..attm.att, 9)
 	if defm.hp<=0 then
-		--check for game over
+		checkend()
+		add(dmob,defm)
+		defm.dur=15
 		del(mob,defm)
 	end
 end
+
+function do_ai()
+	for m in all(mob) do
+		if m!=p then
+			m.mov=nil
+			if dist(m.x,m.y,p.x,p.y)==8then
+				local dx,dy=p.x-m.x,p.y-m.y
+				mobbump(m,dx,dy)
+				hitmob(m,p)
+				_upd=update_aiturn	
+			else
+				local bdst,bx,by=999,0,0
+				for i=1,4 do
+					local dx,dy=dirx[i],diry[i]
+					local tx,ty=m.x+dx,m.y+dy
+					local tle=mget(tx/8,ty/8)
+					if iswalkable(tx/8,ty/8,tle,"checkmobs")	then
+						local d=dist(tx,ty,p.x,p.y)
+						if (d<bdst) bdst,bx,by=d,dx,dy
+					end
+				end
+				mobwalk(m,bx,by)
+				_upd=update_aiturn		
+			end 
+		end
+	end
+end
+-->8
+--gameplay
+
+function update_pturn()
+	if(buttbuff==-1)buttbuff=getbutt()
+	p.t=min(p.t+0.125,1)
+	p.mov(p)
+	if p.t==1 then
+		_upd=update_game
+		if(checkend())do_ai()
+	end
+end
+
+function update_aiturn()
+	dobutt(buttbuff)
+	for m in all(mob) do
+		if m!=p and m.mov then
+			m.t=min(m.t+.125,1)
+			m.mov(m)
+			if(m.t==1)_upd=update_game
+		end
+	end
+end
+
+function trig_bump(tle,destx,desty)
+	if tle==11 or tle==12 then
+		mset(destx,desty,3)
+	elseif tle==6 or tle==8 then
+		mset(destx,desty,tle+1)
+	elseif tle==10 then
+		mset(destx,desty,3)	
+	elseif tle==13 then
+		if(destx==6 and desty==9)show_msg("it begins...",120)
+		if(destx==11 and desty==1)show_lmsg({"invasion is afoot.","","gather datacards."})
+	end
+end
+
+function checkend()
+	if p.hp<=0 then
+		_upd=update_over
+		_drw=draw_over
+		fadeout()
+		return false
+	end
+	return true
+end
+
 __gfx__
 00000000666666606666666000000000aaaaaaa05555555000aaa0000055500000000000000000000aaaaaa00aaa00000aa0aa00aaaaaaa00000000000000000
 000000000606060066666000000000000a000a00055555000a000a000500050000aaa00000555000a000000000aa000000a0a000a00000a00000000000000000
@@ -338,7 +470,7 @@ __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000090000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -374,7 +506,7 @@ __map__
 020b03030303030a0c0b0c0b0203030200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 020c0303030303020303030302020a0200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 020202020202020203030303020c030200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-020c0303030b0c0203030303020c030200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+020c0303130b0c0203030303020c030200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0203030303030c0203030303020c030200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 020303030303030203030303020b030200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 020202020a02020203030202020b030200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
