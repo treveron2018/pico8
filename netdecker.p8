@@ -5,6 +5,9 @@ __lua__
 
 --by treveron
 
+--todo
+--debug los
+
 function _init()
 	t=0
 	dirx={-8,8,0,0,8,8,-8,-8}
@@ -36,7 +39,9 @@ function start_game()
 	mob={}
 	dmob={}
 	float={}
+	wind={}
 	p=add_mob(1,8,96)
+	hpwind=addwind(5,5,28,7,{"♥"..p.hp.."/"..p.maxhp})
 	--test mob
 	for x=0,15 do
 		for y=0, 15 do
@@ -50,6 +55,7 @@ function start_game()
 end
 
 function update_game()
+	dohpwind()
 	if talkwind then
 		if getbutt()==5 then
 			talkwind.dur=0
@@ -63,9 +69,7 @@ function update_game()
 end
 
 function update_over()
---	if btnp(4) then
---		debug="works"
---	end
+--??
 end
 
 function draw_over()
@@ -81,7 +85,8 @@ function draw_game()
 	map()
 	draw_mob()
 	drw_float()
-	--oprint8(mob[2].t,0,0,8)
+	if(debug1 and debug2)pset(debug1+4,debug2+4,10)
+	oprint8(debug,0,0,7,0)
 end
 -->8
 --player functions
@@ -89,11 +94,11 @@ end
 function move_player(d)
 	local dx,dy=dirx[d+1],diry[d+1]
 	local destx,desty=(p.x+dx)/8,(p.y+dy)/8
-	local tle=mget(destx,desty)
-	if not iswalkable(destx,desty,tle,"checkmobs") then
+	if not iswalkable(destx,desty,"checkmobs") then
 		mobbump(p,dx,dy)
 		local m=getmob(destx*8,desty*8)
 		if not m then
+			local tle = mget(destx,desty)
 			if(fget(tle,1))trig_bump(tle,destx,desty)
 		else
 			hitmob(p,m)
@@ -264,6 +269,13 @@ function drw_float()
 		oprint8(f.txt, f.x, f.y, f.c, 0)
 	end 
 end
+
+function dohpwind()
+	hpwind.txt[1]="♥"..p.hp.."/"..p.maxhp
+	local hpy=5
+	if(p.y<=64)hpy=110
+	hpwind.y+=(hpy-hpwind.y)/5
+end
 -->8
 --mob
 
@@ -276,12 +288,10 @@ function add_mob(typ,mx,my)
 		maxhp=mob_hp[typ],
 		ox=0,
 		oy=0,
-		sox=0,
-		soy=0,
 		_flip=false,
-		mov=nil,
 		t=0,
 		flash=0,
+		task=ai_wait,
 		ani={}
 	}
 	for i=0,5 do
@@ -322,13 +332,15 @@ function inbounds(x,y)
 	return not (x<0 or y<0 or x>15 or y>15)
 end
 
-function iswalkable(x,y,tle,mode)
+function iswalkable(x,y,mode)
 	if(mode==nil)mode=""
 	if inbounds(x,y) then
+		local tle=mget(x,y)
 		if not fget(tle,0) then
 			if mode=="checkmobs" then
 				return getmob(x*8,y*8)==false
 			end
+			return true
 		end
 		return false
 	end
@@ -387,33 +399,47 @@ end
 function do_ai()
 	for m in all(mob) do
 		if m!=p then
-			m.mov=nil
-			if dist(m.x,m.y,p.x,p.y)==8then
-				local dx,dy=p.x-m.x,p.y-m.y
-				mobbump(m,dx,dy)
-				hitmob(m,p)
-				_upd=update_aiturn	
-			else
-				local bdst,bx,by=999,0,0
-				for i=1,4 do
-					local dx,dy=dirx[i],diry[i]
-					local tx,ty=m.x+dx,m.y+dy
-					local tle=mget(tx/8,ty/8)
-					if iswalkable(tx/8,ty/8,tle,"checkmobs")	then
-						local d=dist(tx,ty,p.x,p.y)
-						if (d<bdst) bdst,bx,by=d,dx,dy
-					end
-				end
-				mobwalk(m,bx,by)
-				_upd=update_aiturn		
-			end 
+			m.task(m)			 
 		end
+	end
+end
+
+function ai_wait(m)
+	if los(m.x,m.y,p.x,p.y)then
+		m.task=ai_att
+		m.tx,m.ty=p.x,p.y
+		addfloat(m.x+2,m.y,"!",10)
+	end
+end
+
+function ai_att(m)
+	if dist(m.x,m.y,p.x,p.y)==8 then
+		local dx,dy=p.x-m.x,p.y-m.y
+		mobbump(m,dx,dy)
+		hitmob(m,p)
+		_upd=update_aiturn	
+	else
+		if los(m.x,m.y,p.x,p.y) then
+   m.tx,m.ty=p.x,p.y
+  end
+		local bdst,bx,by=999,0,0
+		for i=1,4 do
+			local dx,dy=dirx[i],diry[i]
+			local tx,ty=m.x+dx,m.y+dy
+			if iswalkable(tx/8,ty/8,"checkmobs")	then
+				local d=dist(tx,ty,p.x,p.y)
+				if (d<bdst) bdst,bx,by=d,dx,dy
+			end
+		end
+		mobwalk(m,bx,by)
+		_upd=update_aiturn		
 	end
 end
 -->8
 --gameplay
 
 function update_pturn()
+	dohpwind()
 	if(buttbuff==-1)buttbuff=getbutt()
 	p.t=min(p.t+0.125,1)
 	p.mov(p)
@@ -449,10 +475,91 @@ end
 
 function checkend()
 	if p.hp<=0 then
+	wind={}
 		_upd=update_over
 		_drw=draw_over
 		fadeout()
 		return false
+	end
+	return true
+end
+
+--[[function los(x1,y1,x2,y2)
+	local frst,sx,sy,dx,dy=true
+	if(dist(x1,y1,x2,y2)==8) return true
+	if x1<x2 then
+		sx=1
+		dx=x2-x1
+	else
+		sx=-1
+		dx=x1-x2
+	end
+	if y1<y2 then
+		sy=1
+		dy=y2-y1
+	else
+		sy=-1
+		dy=y1-y2
+	end
+	local err,e2=dx-dy,nil
+	while not(x1==x2 and y1==y2)do
+		if (not frst and not iswalkable(x1,y1,"sight"))then
+			debug1=x1
+  	debug2=y1
+			return false
+		end
+		frst=false
+		e2=err+err
+		if e2>-dy then
+			err-=dy
+			x1+=sx
+		end
+		if e2<dx then
+			err+=dx
+			y1+=sy
+		end	
+	end
+	return true
+end
+]]
+
+function los(x1,y1,x2,y2)
+	local frst,sx,sy,dx,dy=true
+	if(dist(x1,y1,x2,y2)==8) return true
+	if x1<x2 then
+		sx=8
+		dx=x2-x1
+	else
+		sx=-8
+		dx=x1-x2
+	end
+	if y1<y2 then
+		sy=8
+		dy=y2-y1
+	else
+		sy=-8
+		dy=y1-y2
+	end
+	local err,e2=dx-dy,nil
+	local lap=0
+	while not(x1==x2 and y1==y2)do
+		lap+=1
+		if (not frst and not iswalkable(x1/8,y1/8,"sight"))then
+			debug=lap
+			debug1=x1
+  	debug2=y1
+			return false
+		end
+		frst=false
+		e2=err+err
+		if e2>-dy then
+			err-=dy
+			x1+=sx
+		end
+		if e2<dx then
+			err+=dx
+			y1+=sy
+		end	
 	end
 	return true
 end
