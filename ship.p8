@@ -249,7 +249,7 @@ function shoot()
 		local b={
 			x=p.px[1],
 			y=p.py[1],
-			dx=-sin(p.rot*-1)*p.r+p.x*0.005,
+			dx=-sin(p.rot*-1)*p.r+p.x*.005,
 			dy=cos(p.rot*-1)*p.r+p.y*.005,
 			r=1,
 			age=15,
