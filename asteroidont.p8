@@ -5,8 +5,11 @@ __lua__
 
 --by treveron
 
+--todo
+--add propeller to p2 ship
 function _init()
 	poke(0x5f2d,1)
+	cartdata("trev_asteroidont_1_5")
 	dpal={0,1,1,2,1,13,6,4,4,9,3,13,1,13,14}	
 	cur={
 		x=64,
@@ -16,12 +19,16 @@ function _init()
 		tax=0,
 		tay=0
 	}
-	h_score=0
+	h_score=dget(0)
+	if (not h_score)h_score=0
 	btn_released=true
 	fadeperc=1
-	t=0
 	_upd=upd_title
 	_drw=drw_title
+	t=0
+	player_sel={}
+	load_player_n()
+	players=1
 end
 
 function _update60()
@@ -32,7 +39,10 @@ end
 
 function start_game()
 	music(0,0,12)
+	p=nil
 	t=0
+	over=false
+	over_t=0
 	asteroids={}
 	ships={}
 	ufo={}
@@ -40,16 +50,16 @@ function start_game()
 	shwaves={}
 	sparks={}		
 
---possible power up variables
-	ast_div=2
+--power up variables
 	maxdir_timer=30
 	dir_timer=maxdir_timer
 	ast_spd=1.5
 	maxaspawn_t=600
 	aspawn_t=0
 	amp_r=0
+	ast_div=2
 	cmaxr=2
---ast_hp
+	ast_hp=1
 		
 	sposx=0
 	sposy=0
@@ -66,15 +76,19 @@ function start_game()
 	
 	power_ups={}
 	pow_n=2
-	pow_id={1,2,3,4,5,6}
+	pow_id={1,2,3,4,5,6,7,8,9}
+	pow_lvl={1,1,1,1,1,1,2,2,2}
 	pow_txt={"faster asteroids",
 		"slower bullets",
 		"⬆️ asteroid spawn",
 		"⬆️ direction time",
 		"⬆️asteroid radius",
-		"more options"
+		"more options",
+		"⬆️ asteroid hp",
+		"⬆️ asteroid div",
+		"⬆️asteroid number"
 	}
-	pow_spr={2,3,4,5,6,7}
+	pow_spr={2,3,4,5,6,7,18,19,20}
 		
 	ast_spawn_loc={
 		{x=-(8+amp_r),y=nil},
@@ -86,21 +100,29 @@ function start_game()
 	xp=0
 	next_lvl=3
 	score=0
-	
-	spawn_ast(10,10)
-	spawn_ship(84,84)
-	spawn_ship(44,44)
+	dir=false
+	p2_t=0
 	
 	fadeperc=1
 	_upd=upd_game
 	_drw=drw_game
+
+	spawn_ast(10,10)
+	spawn_ship(64,64)
 end
 
 function upd_title()
-	if(cur.bt==1 and btn_released)start_game()
+	cursor_select(player_sel,48,8)
+	for p in all(player_sel) do
+		if cur.bt==1 and btn_released and p.sel then
+			players=p.id
+			start_game()
+		end
+	end	
 end
 
 function upd_game()
+	if(players==2 and #ships>0)upd_p2()
 	upd_ast()
 	ast_select()
 	upd_ships()
@@ -112,6 +134,7 @@ function upd_game()
 	if(count_maxr()<cmaxr)spawn_timer()
 	spawn_ship_timer()
 	check_xp()
+	if(over)game_over()
 end
 
 function upd_dir()
@@ -120,6 +143,7 @@ function upd_dir()
 	if cur.bt!=1 or dir_timer<=0 then
 		_upd=upd_game
 		_drw=drw_game
+		dir=false
 		sfx(21)
 	end
 end
@@ -139,22 +163,24 @@ end
 function drw_dir()
 	drw_elements()
 	line(cur.x,cur.y,cur.tax,cur.tay,7)
-	show_timer(get_ast())
+	show_timer()
 end
 
 function drw_title()
 	map()
 	print("by @trevvieaamb",2,2,7)
-	print("hi-score: "..h_score,45,75,7)
-	mouse_icon(32,88,"start the game")
+	print("hi-score: "..h_score,38,75,7)
+	drw_pl_sel()
 end
 
 function drw_over()
 	map(16,0)	
 	if score>h_score then
 		print("new high score!",32,74,7)
+		h_score=score
+		dset(0,h_score)
 	end
-		print("score: "..score,32,84,7)	
+	print("score: "..score,32,84,7)	
 	mouse_icon(32,100,"back to title")
 end
 
@@ -174,8 +200,7 @@ function _draw()
 	drw_cursor()
 	checkfade()
 	--debug
-
-end
+	end
 
 -->8
 --cursor
@@ -185,7 +210,7 @@ function upd_cursor()
 	cur.y=stat(33)
 	cur.bt=stat(34)
 	if(cur.bt==0)btn_released=true
-	ast_clic()
+	if(not dir)ast_clic()
 end
 
 function drw_cursor()
@@ -194,7 +219,7 @@ end
 
 function ast_select()
 	for a in all(asteroids)do
-		if dist(cur.x,cur.y,a.x,a.y)<a.r+amp_r then
+		if dist(cur.x,cur.y,a.x,a.y)<a.sr+amp_r then
 			a.sel=true
 		else
 			a.sel=false
@@ -206,6 +231,7 @@ function ast_clic()
 	for a in all(asteroids)do
 		if cur.bt==1 and a.sel and dir_timer==maxdir_timer then
 			cur.tax,cur.tay=a.x,a.y
+			dir=true
 			_upd=upd_dir
 			_drw=drw_dir
 			sfx(20)
@@ -215,7 +241,19 @@ function ast_clic()
 	end
 end
 
-
+function cursor_select(items,w,h)
+	for i in all(items)do
+		if cur.x<i.x
+		or cur.x>i.x+w 
+		or cur.y<i.y
+		or cur.y>i.y+h then
+			i.sel=false
+			i.t=0
+		else
+			i.sel=true
+		end
+	end
+end
 -->8
 --tools
 
@@ -270,6 +308,37 @@ end
 function getframe(ani)
  return ani[flr(t/15)%#ani+1]
 end
+
+function loading_bar(t,maxt,x,y)
+	local bar=flr(t*5/maxt)
+	rect(x-1,y-1,x+4,y+7,0)
+	rectfill(x,y,x+3,y+6,0)
+	rectfill(x,y+5-bar,x+3,y+5,7)
+	rect(x,y,x+3,y+6,7)
+end
+
+function load_player_n()
+	local _x=10
+	for i=1,2 do
+		s={
+			id=i,
+			x=_x,
+			y=88,
+			sel=false,
+			txt=i.."player(s)"
+		}
+		add(player_sel,s)
+		_x+=64
+	end
+end
+
+function drw_pl_sel()
+	for s in all (player_sel)do
+		local col=7
+		if(s.sel)col=10
+		mouse_icon(s.x,s.y,s.txt,col)
+	end
+end
 -->8
 --asteroids
 
@@ -278,8 +347,12 @@ function spawn_ast(_x,_y,_r)
 	local a={
 		x=_x,
 		y=_y,
-		r=_r
+		r=_r,
+		hp=ast_hp,
+		flash=0
 	}
+	a.sr=a.r
+	if(a.sr<8)a.sr=6
 	stir(a,rnd())
 	add(asteroids,a)
 end
@@ -288,14 +361,17 @@ function upd_ast()
 	for a in all(asteroids) do
 		a.x+=a.dx
 		a.y+=a.dy
+		if(a.flash>0)a.flash-=1
 		checkastpos(a)
 	end
 end
 
 function drw_ast()
 	for a in all(asteroids) do
-		circfill(a.x,a.y,a.r+amp_r,7)
-		circ(a.x,a.y,a.r+1+amp_r,0)
+		if a.flash==0 or (a.flash>0 and sin(time()*8)>0) then
+			circfill(a.x,a.y,a.r+amp_r,7)
+			circ(a.x,a.y,a.r+1+amp_r,0)	
+		end
 		if(a.sel)circ(a.x,a.y,a.r+2+amp_r,7)
 	end
 end
@@ -314,34 +390,37 @@ function stir(ast,ang)
 end
 
 function dmg_ast(ast)
-	if ast.r==8 then
-		for i=1,ast_div do
-			spawn_ast(ast.x,ast.y,4)
+	ast.hp-=1
+	if ast.hp>0 then
+		ast.flash=60
+		sfx(21)
+		stir(ast,rnd())
+	else	
+		if ast.r==8 then
+			for i=1,ast_div do
+				spawn_ast(ast.x,ast.y,4)
+			end
+		elseif ast.r==4 then
+			for i=1,ast_div do
+				spawn_ast(ast.x,ast.y,2)
+			end	
 		end
-	elseif ast.r==4 then
-		for i=1,ast_div do
-			spawn_ast(ast.x,ast.y,2)
-		end	
+		explode(ast)
+		del(asteroids,ast)
+		checkend()
+		sfx(19)
 	end
-	explode(ast)
-	del(asteroids,ast)
-	checkend()
-	sfx(19)
 end
 
-function show_timer(ast)
-	local r=ast.r
-	local x,y=ast.x-r,ast.y-r
-	if(ast.x<64)x+=r*2
-	if(ast.y<64)y+=r*2
-	local bar=flr(dir_timer*5/maxdir_timer)
-	rectfill(x-2,y-2,x+3,y+6,0)
-	rectfill(x-1,y+5-bar,x+2,y+5,7)
-	rect(x-1,y-1,x+2,y+5,7)
+function show_timer()
+	local x,y=cur.x-3,cur.y-7
+	if(cur.x<64)x+=11
+	if(cur.y<64)y+=8
+	loading_bar(dir_timer,maxdir_timer,x,y)
 end
 
 function spawn_timer()
-	aspawn_t+=1
+	if(#asteroids>0)aspawn_t+=1/players
 	if aspawn_t>=maxaspawn_t then		
 		local pos=rnd(ast_spawn_loc)
 		if (pos.x==nil)	pos.x=flr(rnd(119)+8)	
@@ -375,7 +454,15 @@ function spawn_ship(_x,_y)
 		hp=1,
 		flash=0,
 		points=100,
-		xp=1
+		xp=1,
+		dx=0,
+		dy=0,
+		rotspd=.02,
+		acc=.05,
+		spd=0,
+		frc=.01,
+		vmax=1.5,
+		vmin=-1.5
 	}
 	add(ships,sh)
 end
@@ -394,22 +481,30 @@ function spawn_ship2(_x,_y)
 		hp=2,
 		flash=0,
 		xp=3,
-		points=300
+		points=300,
+		dx=0,
+		dy=0,
+		rotspd=.02,
+		acc=.05,
+		spd=0,
+		frc=.01,
+		vmax=1.5,
+		vmin=-1.5
 	}
 	add(ships,sh)
 end
 
 function spawn_ship_timer()
-	sspawn_t+=1
+	sspawn_t+=1/players
 	if sspawn_t>=maxsspawn_t-20 and not spw_sw then
 		spw_sw=true
-		sposx,sposy=rnd(120)+16,rnd(120)+7
+		sposx,sposy=rnd(104)+16,rnd(120)+7
 		local overlap=false
 		for s in all(ships)do
 			overlap=check_overlap(s.x,s.y,s.r,sposx,sposy,4)
 		end
 		while overlap do
-			sposx,sposy=rnd(120)+16,rnd(120)+7
+			sposx,sposy=rnd(104)+16,rnd(120)+7
 			for s in all(ships)do
 				overlap=check_overlap(s.x,s.y,s.r,sposx,sposy,4)
 			end
@@ -435,9 +530,13 @@ end
 
 function upd_ships()
 	shoot_t+=1
+	if p2_t>0 then
+		p2_t-=1
+		if(p2_t==0)add_shwave(p.x,p.y,1,10)
+	end
 	for s in all(ships)do
 		if(s.flash>0)s.flash-=1
-		if(#asteroids>0)s.rot=aim(s)
+		if(#asteroids>0 and s!=p or p2_t>0)s.rot=aim(s)
 		if(shoot_t==shoot_tl-5)then
 			add_shwave(s.px[1],s.py[1],5,0)
 		elseif shoot_t==shoot_tl then
@@ -452,12 +551,13 @@ function upd_ships()
 			s.px[i]=sin(s.rot+s.pang[i])*(s.r-s.poff[i])+s.x
 			s.py[i]=cos(s.rot+s.pang[i])*(s.r-s.poff[i])+s.y
 			local ast=ship_col(s.px[i],s.py[i])
-			if ast and s.flash==0 then 
+			if ast and ast.flash==0 and s.flash==0 then 
 				s.hp-=1
 				if s.hp<=0 then
 					explode(s)
 					xp+=s.xp
 					score+=s.points
+					if(s==p)p2_t=300
 					del(ships,s)
 					sfx(18)
 				else
@@ -472,6 +572,15 @@ end
 
 function drw_ships()
 	for s in all(ships)do
+		if s==p then
+			local x,y=p.x+5,p.y+5
+			if(x>64)x-=15
+			if(y>64)y-=15
+			if p2_t==0 then
+				print("p2",x,y,7)
+			else print(flr(p2_t/60),x,y,7)
+			end
+		end
 		if s.flash==0 or (s.flash>0 and sin(time()*8)>0) then
    for i=1,#s.pang do
 				local off=1
@@ -503,8 +612,7 @@ end
 
 function explode(s)
 	add_shwave(s.x,s.y,0,20)
-	add_sparks(s.x,s.y,40)
-	
+	add_sparks(s.x,s.y,40)	
 end
 
 function shoot(s)
@@ -565,6 +673,66 @@ end
 function check_overlap(x1,y1,r1,x2,y2,r2)
 	return dist(x1,y1,x2,y2)<r2+r1+4
 end
+
+function upd_p2()
+	p=ships[1]
+	if(p2_t==0)move_shp()
+end
+
+function move_shp()
+	if(btn(⬅️))p.rot-=p.rotspd
+	if(btn(➡️))p.rot+=p.rotspd
+	if(p.rot>1)p.rot=-1
+	if btn(⬆️) then
+		thrust()
+		--propel()
+	end
+	p.x+=p.dx
+	p.y+=p.dy
+	if(p.dx>0)p.dx-=p.frc
+	if(p.dx<0)p.dx+=p.frc
+	if(p.dy>0)p.dy-=p.frc
+	if(p.dy<0)p.dy+=p.frc
+	
+	checkastpos(p)
+end
+
+function thrust()
+	p.dx+=-sin(p.rot*-1)*p.acc	
+	p.dx=min(p.dx,1.5)
+	p.dx=max(p.dx,-1.5)
+	p.dy+=cos(p.rot*-1)*p.acc
+	p.dy=min(p.dy,1.5)
+	p.dy=max(p.dy,-1.5)
+end
+--[[
+function propel()
+	if t%4==0 then
+		local c={
+		x=p.px[5],
+		y=p.py[5],
+		r=2,
+		age=10}
+		add(propeller,c)
+	end
+end
+
+function upd_prop()
+	for c in all(propeller) do
+		c.age-=1
+		if c.age<=0 then
+			c.r-=.25
+			if(c.r<=0)del(propeller,c)
+		end
+	end
+end
+
+function drw_prop()
+	for c in all(propeller) do
+		circ(c.x,c.y,c.r,7)
+	end
+end]]
+
 -->8
 --particles
 
@@ -637,14 +805,14 @@ function display_xp()
 	rectfill(1,126-bar,6,126,7)
 end
 
-function mouse_icon(x,y,txt)
+function mouse_icon(x,y,txt,col)
 	local spt=17
 	if sin(time()*2)>0 then
 		spt=33
 		y+=1
 	end
 	spr(spt,x,y)
-	print(txt,x+10,y+2,7)
+	print(txt,x+10,y+2,col)
 end
 -->8
 --gameplay
@@ -663,8 +831,9 @@ function check_xp()
 end
 
 function upd_lvl()
-	cursor_pow()
-	if cur.bt==1 and get_selpow() then
+	cursor_select(power_ups,80,7)
+
+	if cur.bt==1 and get_selpow() and get_selpow().t==60 then
 		_upd=upd_game
 		_drw=drw_game
 		level_up(get_selpow().id)
@@ -677,14 +846,22 @@ end
 
 function drw_lvl()
 	drw_elements()
-	local windx,windy,windx2,windy2=35,30,115,35+pow_n*10+10
+	local maxi=pow_n
+	if (lvl%5==0)maxi=3
+	local windx,windy,windx2,windy2=35,30,115,35+maxi*10+10
 	rect(windx-1,windy-1,windx2+1,windy2+1,7)
 	rectfill(windx,windy,windx2,windy2,0)
 	print("level "..lvl.."!",windx+2,windy+2,7)
-	for i=1,pow_n do
+	for i=1,maxi do
 		local _x,_y=2+windx,windy+12*i
 		local col=7
-		if(power_ups[i].sel)col=10
+		if power_ups[i].sel then
+			col=10
+			if cur.bt==1 then
+				power_ups[i].t+=1
+				loading_bar(power_ups[i].t,60,power_ups[i].x-5,power_ups[i].y+1)			
+			end
+		end
 		rect(_x-1,_y-1,_x+8,_y+8,col)
 		spr(power_ups[i].spt,_x,_y)
 		print(power_ups[i].txt,_x+10,_y+2,col)		
@@ -693,10 +870,15 @@ function drw_lvl()
 end
 
 function load_pows()
-	for i=1,pow_n do
-		local n=flr(rnd(6))+1
+	local pups,maxi={1,2,3,4,5,6},pow_n
+	if lvl%5==0 then
+		pups={7,8,9}
+		maxi=3
+	end
+	for i=1,maxi do
+		local n=rnd(pups)
 		while pow_n==4 and n==6 do
-			n=flr(rnd(6))+1
+			n=rnd(pups)
 		end
 		local p={
 			id=pow_id[n],
@@ -704,22 +886,11 @@ function load_pows()
 			spt=pow_spr[n],
 			sel=false,
 			x=0,
-			y=0
+			y=0,
+			t=0
 		}
 		add(power_ups,p)
-	end
-end
-
-function cursor_pow()
-	for p in all(power_ups)do
-		if cur.x<p.x
-		or cur.x>p.x+80 
-		or cur.y<p.y
-		or cur.y>p.y+7 then
-			p.sel=false
-		else
-			p.sel=true
-		end
+		del(pups,n)
 	end
 end
 
@@ -733,35 +904,42 @@ end
 function level_up(id)
 	if id==1 then
 		ast_spd*=1.1
-		debug=ast_spd
 	elseif id==2 then
 		bulspddiv*=1.1
-		debug=bulspddiv
 	elseif id==3 then
 		maxaspawn_t*=.9
-		debug=maxaspawn_t
 	elseif id==4 then
 		maxdir_timer*=1.1
-		debug=maxdir_timer
 	elseif id==5 then
 		amp_r+=.5
-		debug=amp_r
 	elseif id==6 then
 		pow_n+=1
-		debug=pow_n
+	elseif id==7 then
+		ast_hp+=1
+	elseif id==8 then
+		ast_div+=1
+	elseif id==9 then
+		cmaxr+=1
 	end
 end
 
 function checkend()
-	if #asteroids==0 then
+	if #asteroids==0 and not over then
+		over=true
+		over_t=120
+		music(-1,2000)
+	end
+end
+
+function game_over()
+	over_t-=1
+	if over_t==0 then
 		if(not cur.bt==0)btn_released=false
 		_upd=upd_over
 		_drw=drw_over
 		fadeout(0.02)
-		music(-1,1000)
 	end
 end
-
 -->8
 --ufo
 
