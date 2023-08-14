@@ -1,6 +1,9 @@
 pico-8 cartridge // http://www.pico-8.com
 version 41
 __lua__
+--netdecker
+--by treveron
+
 function _init()
  t=0
  
@@ -13,6 +16,8 @@ function _init()
  mob_hp ={5,2}
  mob_los={4,4}
  
+ itm_name={"plasma canon","steel plating","repair nanites", "shuriken", "ion canon"}
+ itm_type={"wep","arm","fud","thr","wep"}
  debug={}
  startgame()
 end
@@ -55,10 +60,23 @@ function startgame()
  end
  
  p_t=0
- 
+	
+	inv,eqp={},{}
+	--eqp[1] - weapon
+	--eqp[2] - armor
+
+	--inv[1-6] - inventory
+	
+	takeitem(1)
+	takeitem(2)
+	takeitem(3)		 
+ takeitem(4)
+ takeitem(5)
+
  wind={}
  float={}
- fog=blankmap(1)
+ fog=blankmap(0)--test (1)
+	
  talkwind=nil
  
  hpwind=addwind(5,5,28,13,{})
@@ -117,6 +135,35 @@ function update_gover()
  end
 end
 
+function update_inv()
+	if btnp(4)then
+		if curwind==invwind then
+		_upd=update_game
+		invwind.dur=0
+		statwind.dur=0
+		elseif curwind==usewind then
+			usewind.dur=0
+			curwind=invwind
+		end
+	elseif btnp(5)then
+		if curwind==invwind and invwind.cur!=3 then
+			showuse()
+		elseif curwind==usewind then
+			triguse()
+		end
+	end
+		move_menu(curwind)
+end
+
+function move_menu(wnd)
+	if btnp(2) then
+		wnd.cur-=1
+	elseif btnp(3) then
+				wnd.cur+=1
+	end
+	wnd.cur=(wnd.cur-1)%#wnd.txt+1
+end
+
 function dobuttbuff()
  if buttbuff==-1 then
   buttbuff=getbutt()
@@ -136,6 +183,8 @@ function dobutt(butt)
  if butt<0 then return end
  if butt<4 then
   moveplayer(dirx[butt+1],diry[butt+1])
+ elseif butt==5 then
+ 	showinv()
  end
  -- menu button
 end
@@ -265,6 +314,7 @@ function blankmap(_dflt)
  end
  return ret
 end
+
 -->8
 --gameplay
 
@@ -310,11 +360,11 @@ function trig_bump(tle,destx,desty)
   --stone tablet
   --showmsg("hello world",120)
   if destx==2 and desty==5 then
-   showmsg({"welcome to porklike","","climb the tower","to obtain the","golden kielbasa"})
+   showtalk({"welcome to porklike","","climb the tower","to obtain the","golden kielbasa"})
   elseif destx==13 and desty==12 then
-   showmsg({"this is the 2nd message"})
+   showtalk({"this is the 2nd message"})
   elseif destx==13 and desty==6 then
-   showmsg({"you're almost there!"})
+   showtalk({"you're almost there!"})
   end
  end
 end
@@ -398,7 +448,7 @@ function los(x1,y1,x2,y2)
   e2,frst=err+err,false
   if e2>-dy then
    err=err-dy
-   x1=x1+sx
+   x1+=sx
   end
   if e2<dx then
    err+=dx
@@ -428,6 +478,30 @@ function unfogtile(x,y)
   end
 	end
 end
+
+function calcdist(tx,ty)
+ local cand,step={},0
+ distmap=blankmap(-1)
+ add(cand,{x=tx,y=ty})
+ distmap[tx][ty]=0
+ repeat
+  step+=1
+  candnew={} 
+  for c in all(cand) do
+   for d=1,4 do
+    local dx=c.x+dirx[d]
+    local dy=c.y+diry[d]
+    if inbounds(dx,dy) and distmap[dx][dy]==-1 then
+     distmap[dx][dy]=step
+     if iswalkable(dx,dy) then
+      add(candnew,{x=dx,y=dy})
+     end
+    end
+   end
+  end
+  cand=candnew
+ until #cand==0
+end
 -->8
 --ui
 
@@ -449,9 +523,17 @@ function drawind()
   wx+=4
   wy+=4
   clip(wx,wy,ww-8,wh-8)
+  if w.cur then
+  	wx+=6
+  end
   for i=1,#w.txt do
-   local txt=w.txt[i]
-   print(txt,wx,wy,6)
+   local txt,col=w.txt[i],6
+   if (w.col and w.col[i])col=w.col[i]
+   
+   print(txt,wx,wy,col)
+   if i==w.cur then
+   	spr(255,wx-5+sin(time()),wy)
+   end
    wy+=6
   end
   clip()
@@ -480,7 +562,7 @@ function showmsg(txt,dur)
  w.dur=dur
 end
 
-function showmsg(txt)
+function showtalk(txt)
  talkwind=addwind(16,50,94,#txt*6+7,txt)
  talkwind.butt=true
 end
@@ -506,6 +588,86 @@ function dohpwind()
   hpy=110
  end
  hpwind.y+=(hpy-hpwind.y)/5
+end
+
+function showinv()
+	local txt,col,itm,eqt={},{}
+	_upd=update_inv
+	for i=1,2 do
+	 itm=eqp[i]
+		if itm then 
+			eqt=itm_name[itm]
+			add(col,6)
+		else
+			eqt= i==1 and "[weapon]" or "[armor]"
+			add(col,5)
+		end
+		add(txt,eqt)
+	end
+	add(txt,"……………………")
+	add(col,5)
+	for i=1,6 do
+		itm=inv[i]
+		if itm then 
+			add(txt,itm_name[itm])
+			add(col,6)
+		else
+			add(txt,"...")		
+			add(col,5)
+		end
+	end
+	
+	invwind=addwind(5,17,84,62,txt)
+	invwind.cur=3
+	invwind.col=col
+	
+	statwind=addwind(5,5,84,13,{"atk: 1	def: 1"})
+	curwind=invwind
+end
+
+function showuse()
+	local itm=invwind.cur<3 and eqp[invwind.cur] or inv[invwind.cur-3]
+	local typ,txt=itm_type[itm],{}
+	if(not itm)return
+	if (typ=="wep" or typ=="arm") and invwind.cur>3 then
+		add(txt,"equip")
+	end	
+	if typ=="fud" then
+		add(txt,"eat")
+	end
+	if typ=="thr" or typ=="fud" then
+		add(txt,"throw")
+	end	
+	add(txt,"trash")
+	
+	usewind=addwind(85,invwind.cur*6+11,36,7+#txt*6,txt)
+	usewind.cur=1
+	curwind=usewind
+end
+
+function triguse()
+ local verb,i=usewind.txt[usewind.cur],invwind.cur
+	local itm=invwind.cur<3 and eqp[i] or inv[i-3]
+
+	if verb=="trash" then
+		if i<3 then
+			eqp[i]=nil
+		else 
+			inv[i-3]=nil
+		end
+	elseif verb=="equip" then
+		local slot=itm_type[itm]=="wep" and 1 or 2
+		inv[i-3]=eqp[slot]
+		eqp[slot]=itm
+	elseif verb=="eat" then
+	
+	elseif verb=="throw" then
+	
+	end
+	usewind.dur=0
+	invwind.dur=0
+	statwind.dur=0
+	_upd=update_game
 end
 -->8
 --mobs
@@ -610,19 +772,27 @@ function ai_attac(m)
    m.task=ai_wait
    addfloat("?",m.x*8+2,m.y*8,10)
   else 
-   local bdst,bx,by=999,0,0
+   local bdst,cand=999,{}
+    calcdist(m.tx,m.ty)
    for i=1,4 do
     local dx,dy=dirx[i],diry[i]
     local tx,ty=m.x+dx,m.y+dy
     if iswalkable(tx,ty,"checkmobs") then
-     local dst=dist(tx,ty,m.tx,m.ty)
+     local dst=distmap[tx][ty]
      if dst<bdst then
-      bdst,bx,by=dst,dx,dy
+     	cand={}
+     	bdst=dst
+     end
+     if dst==bdst then
+     	add(cand,{x=dx,y=dy})
      end
     end
    end
-   mobwalk(m,bx,by)
-   return true
+   if#cand>0 then
+			 local c=rnd(cand)
+			 mobwalk(m,c.x,c.y)
+   	return true   
+   end
    --todo: re-aquire target?
   end
  end
@@ -631,6 +801,24 @@ end
 
 function cansee(m1,m2)
 	return los(m1.x,m1.y,m2.x,m2.y) and dist(m1.x,m1.y,m2.x,m2.y)<=m1.los
+end
+
+-----------------------
+--items
+-----------------------
+
+function takeitem(itm)
+	local i=freeinvslot()
+	if(i==0)return false
+	inv[i]=itm
+	return true
+end
+
+function freeinvslot()
+	for i=1,6 do
+		if (not inv[i]) return i
+	end
+	return 0
 end
 __gfx__
 000000000000000066666660000000000000000000000000aaaaaaa00aaa00000aa0aa0000000000000000000055500000aaa0000aaaaaa0aaaaaaa055555550
@@ -753,11 +941,11 @@ __gfx__
 66666660606660600066600000666000006060000060600000000000000000000000000000000000000000000000000000000000000000000000000000000000
 60666060006660000666660006606600066066000660660000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00666000006660000000000000666000006660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-06600600066006000066600006600600066006000066600000000000000000000000000000000000000000000000000000000000000000000000000000000000
-06600600666006000660060006600600066006600660060000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666660666666606660066066666660666666606660066000000000000000000000000000000000000000000000000000000000000000000000000000000000
-60666060006660606666666060666060606660006666666000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00666000006660000000000000666000006660000000000000000000000000000000000000000000000000000000000000000000000000000000000070000000
+06600600066006000066600006600600066006000066600000000000000000000000000000000000000000000000000000000000000000000000000077000000
+06600600666006000660060006600600066006600660060000000000000000000000000000000000000000000000000000000000000000000000000077700000
+66666660666666606660066066666660666666606660066000000000000000000000000000000000000000000000000000000000000000000000000077000000
+60666060006660606666666060666060606660006666666000000000000000000000000000000000000000000000000000000000000000000000000070000000
 00606000006066000066600000606000066060000066600000000000000000000000000000000000000000000000000000000000000000000000000000000000
 06606600066000000660660006606600000066000660660000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __gff__
@@ -769,7 +957,7 @@ __map__
 0201010101020202020102010202020200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0201010101020101010102010101010200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 020101010102c00101010202c002010200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-02010101010202020202020202020d0200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+02010601010102020202020202020d0200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 020101010101010101010101c001010200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 02020d0202020202020202020102020200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 010101010d010102010101020d02020200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
