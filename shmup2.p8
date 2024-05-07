@@ -5,11 +5,8 @@ __lua__
 --by treveron
 
 --todo
-	--enemy bullets
-	--functional barrier
-	--death
-	--explosions
 	--bomb mode
+	--touch pad buttons
 
 function _init()
 	t=0
@@ -18,22 +15,24 @@ function _init()
 		y=64,
 		sp=2,
 		bn=0,
-		maxbn=10,
-		rot=0
+		maxbn=10,	
+		isdead=false,
+		rt=0,
+		ifr=0
 	}
 	orbitals={}
 	orb_mode=1
-	o_dx={-.5,.5,-.5,.5}
-	mode_desc={
-		"disperse",
-		"focused",
-		"barrier"}
+	o_dx=split("-.5,.5,-.5,.5")
+	mode_desc=split("disperse,focused,barrier")
+	obr=4
 	pbul={}
 	ebul={}
 	trails={}
 	trail_c=split("8,9,10")
 	shwaves={}
 	prop={}
+	expl={}
+	sparks={}
 	
 	enemies={}
 	
@@ -55,24 +54,37 @@ function _update60()
 	end
 	
 	--
-	upd_player()
+	if p.isdead then
+		respawn()
+	else
+		upd_player()
+	end
 	upd_trails()
 	upd_pbul()
 	upd_shwaves()
 	upd_prop()
 	upd_orbital()
 	upd_enemies()
+	upd_ebul()
+	upd_sparks()
+	upd_expl()
 end
 
 function _draw()
 	cls()
+	drw_expl()
+	drw_sparks()
 	drw_prop()
 	drw_orbital()
 	drw_shwaves()
-	drw_player()
+	if not p.isdead 
+	or p.isrespawning then
+		drw_player()
+	end
 	drw_trails()
 	drw_pbul()
 	drw_enemies()
+	drw_ebul()
 	print(mode_desc[orb_mode],0,0,7)
 
 end
@@ -80,6 +92,7 @@ end
 --player
 
 function upd_player()
+	if(p.ifr>0)p.ifr-=1	
 	if btn(⬆️)then
 		p.y-=1
 	elseif btn(⬇️)then
@@ -93,6 +106,10 @@ function upd_player()
 		banking(1)
 	else banking(0)
 	end
+	if(p.x<0)p.x=0
+	if(p.x>113)p.x=113
+	if(p.y<0)p.y=0
+	if(p.y>115)p.y=115
 	if btnp(❎)then
 		local offx=3
 		for i=1,2 do
@@ -112,7 +129,9 @@ end
 
 function drw_player()
 local sps={6,4,2,8,10}	
-	spr(sps[flr(p.bn/5)+3],p.x,p.y,2,2)
+	if p.ifr==0 or sin(t/10)<.5 then
+		spr(sps[flr(p.bn/5)+3],p.x,p.y,2,2)
+	end
 end
 
 function upd_phb()
@@ -150,6 +169,10 @@ function upd_pbul()
 		--★
 		if e then
 			hit(b,e)
+			if e.hp<=0 then
+				del(enemies,e)
+				add_expl(e.x+e.w/2,e.y+e.h/2)
+			end
 			del(pbul,b)
 		end
 		if b.y<0-b.r then
@@ -188,6 +211,30 @@ end
 function hit(b,e)
 	e.hp-=b.r
 	e.hf=6
+end
+
+function kill_p()
+	p.isdead=true
+	p.rt=120
+	add_expl(p.x+7,p.y+6)
+end
+
+function respawn()
+	if p.rt>0 then
+		p.rt-=1
+	elseif not p.isrespawning then
+		p.x=56
+		p.y=144
+		p.isrespawning=true
+	else
+		p.y=lerp(p.y,100,.7)
+		if p.y==100 then
+			p.isdead=false
+			p.isrespawning=false
+			p.ifr=120
+		end
+	end
+	
 end
 -->8
 --particles
@@ -290,6 +337,9 @@ function circbox_col(c,b)
 	return dist(c,p)<c.r
 end
 
+function range(low,high)
+	return rnd(high-low+1)+low
+end
 
 -->8
 --orbitals
@@ -299,7 +349,9 @@ function add_orbital()
 		sp=1,
 		x=p.x+8,
 		y=p.y+5,
-		o=#orbitals+1
+		o=#orbitals+1,
+		b=true,
+		bt=0
 	}
 	add(orbitals,o)
 	orb_rot()
@@ -308,30 +360,39 @@ end
 function upd_orbital()
 	local px,py=p.x,p.y
 	for o in all(orbitals)do
-		if orb_mode==3 then
-			o.rot+=.01
-			if(o.rot>1)o.rot=0
-			o.x=lerp(o.x,sin(o.rot)*15+p.x+5,.9)
-			o.y=lerp(o.y,cos(o.rot)*15+p.y+5,.9)
+		if p.isdead then
+			o.y=lerp(o.y,136,.95)		
 		else
-			local orb_pos={
-			{
-				{px-7,py+7},
-				{px+15,py+7},
-				{px-14,py+7},
-				{px+22,py+7},
-				},
-			{
-				{px+1,py-6},
-				{px+7,py-6},
-				{px+1,py-12},
-				{px+7,py-12},
+			if o.bt>0 then
+				o.bt-=1
+			else 
+				o.b=true
+			end
+			if orb_mode==3 then
+				o.rot+=.01
+				if(o.rot>1)o.rot=0
+				o.x=lerp(o.x,sin(o.rot)*15+p.x+5,.9)
+				o.y=lerp(o.y,cos(o.rot)*15+p.y+5,.9)
+			else
+				orb_pos={
+					{
+						{px-7,py+7},
+						{px+15,py+7},
+						{px-14,py+7},
+						{px+22,py+7},
+					},
+					{
+						{px+1,py-6},
+						{px+7,py-6},
+						{px+1,py-12},
+						{px+7,py-12},
+					}
 				}
-			}
-			o.x=lerp(o.x,orb_pos[orb_mode][o.o][1],.9)
-			o.y=lerp(o.y,orb_pos[orb_mode][o.o][2],.9)
-			local dx=orb_mode==1 and o_dx[o.o] or 0
-			if(btnp(❎))shoot(o.x+3,o.y,1,dx)	
+				o.x=lerp(o.x,orb_pos[orb_mode][o.o][1],.9)
+				o.y=lerp(o.y,orb_pos[orb_mode][o.o][2],.9)
+				local dx=orb_mode==1 and o_dx[o.o] or 0
+				if(btnp(❎) and not p.isdead and not p.isrespawning)shoot(o.x+3,o.y,1,dx)	
+			end
 		end
 		propel(o.x+3,o.y+6,2)
 	end
@@ -340,6 +401,12 @@ end
 function drw_orbital()
 	for o in all(orbitals)do
 		spr(o.sp,o.x,o.y)
+		if orb_mode==3 then
+			local cols={7,12}
+			local col=cols[flr(t/5)%2+1]
+			if(not o.b)col=5
+			circ(o.x+3,o.y+3,obr,col)
+		end
 	end
 end
 
@@ -385,8 +452,9 @@ function upd_enemies()
 		--type 1
 			e.y+=.5
 			e.x+=sin(e.t/150)*.5
+			if(e.t%60==0)e_shoot(e)
 		--
-		if e.y>=128 or e.hp<=0then
+		if e.y>=128 then
 			del(enemies,e)
 		end
 	end
@@ -403,6 +471,170 @@ function drw_enemies()
 		pal()
 	end
 end
+
+function e_shoot(e)
+	local ex,ey=e.x+e.w/2,e.y+e.h/2
+	_ang=atan2(p.y+7-ey,p.x+7-ex)
+
+	local b={
+		x=ex,
+		y=ey,
+		ang=_ang,
+		r=2,
+		spd=2
+	}
+	add(ebul,b)
+end
+
+function upd_ebul()
+	for b in all(ebul) do
+		b.dx=sin(b.ang)/b.spd
+		b.dy=cos(b.ang)/b.spd
+		b.x+=b.dx
+		b.y+=b.dy
+		
+		if b.x<0-b.r 
+		or b.x>128+b.r
+		or b.y<0-b.r 
+		or b.y>128+b.r
+		then
+			del(ebul,b)
+		end
+		for o in all(orbitals)do
+			if dist(b,{x=o.x+3,y=o.y+3})<b.r+obr 
+			and o.b
+			and orb_mode==3 then
+				del(ebul,b)
+				o.bt=120
+				o.b=false
+			end
+		end
+		if dist(b,p.hb)<b.r+p.hb.r and not p.isdead and p.ifr==0 then
+			kill_p()
+		end
+	end
+end
+
+function drw_ebul()
+	for b in all(ebul) do
+		circfill(b.x,b.y,b.r,10)
+	end
+end
+-->8
+--explotions
+
+--blob
+
+function blob(b,c)
+	local thk={
+		5,
+		3,
+		1,
+		0
+	}
+	
+	local p={
+		0b1111111111111111,
+		0b1010011010101111,
+		0b101000001010000,
+		0
+	}
+	if b.r==b.tr then
+		thc={
+		5,
+		3,
+		0
+	}
+	p={		
+		0b1010011010101111,
+		0b101000001010000,
+		0}
+	elseif b.r==b.tr+1 then
+		thk={5,3}
+		p={
+		0b1010011010101111,
+		0b101000001010000}
+	elseif b.r==b.tr+2 then
+		thk={3}
+		p={▒}
+	elseif b.r==b.tr+3 then
+		thk={3}
+		p={░}
+	end
+		
+	for i=1,#thk do
+		fillp(p[i])
+		circfill(b.x,b.y+thk[i],b.r+thk[i],c)
+	end
+	fillp()
+end
+
+function add_expl(_x,_y)
+	local e={
+		x=_x,
+		y=_y,
+		r=-2,
+		tr=8,
+	}
+	add(expl,e)
+	add_sparks(10,_x,_y)
+end
+
+function upd_expl()
+	for e in all(expl) do
+			e.r+=1
+		if(e.r>=e.tr+4)del(expl,e)
+	end
+end
+
+function drw_expl()
+	for e in all(expl)do
+		local r,tr,c=e.r,e.tr,167
+		if r>=tr then
+			c=93
+		elseif r>tr-3 then
+			c=137
+		elseif r>tr-6 then
+			c=154
+		end
+		blob(e,c)
+	end
+end
+
+function add_sparks(n,_x,_y)
+	local ang=rnd()
+	for i=1,n do
+		local ang2=range(ang,.5)
+		local s={
+			x=_x,
+			y=_y,
+			ang2=range(ang,.3),
+			r=range(1,3),
+			a=flr(range(5,10))
+		}
+		add(sparks,s)
+	end
+end
+
+function upd_sparks()
+	for s in all(sparks)do
+		s.a-=1
+		if(s.a==0)del(sparks,s)
+		s.px=s.x
+		s.py=s.y
+		s.x=sin(s.ang2)*s.r+s.x
+		s.y=cos(s.ang2)*s.r+s.y
+	end
+end
+
+function drw_sparks()
+	for s in all(sparks)do
+		local col=10
+		if(s.a<3)col=9
+		line(s.x,s.y,s.px,s.py,col)
+	end
+end
+
 
 __gfx__
 00000000000100000000000000000000000000000000000000000000001000000000000000000000000001000000000000222200008888000000000000000000
